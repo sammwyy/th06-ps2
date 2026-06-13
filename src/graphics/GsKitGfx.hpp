@@ -1,37 +1,17 @@
 #pragma once
 
-#include "GLFunc.hpp"
 #include "GfxInterface.hpp"
-#include <SDL2/SDL.h>
+#include "ZunMath.hpp"
+#include <gsKit.h>
 #include <vector>
 
-enum GlShaderUniform
+// PS2 renderer backend. Vertices are transformed on the EE with the same math
+// the software rasterizer used, then handed to the GS as gouraud (textured)
+// triangles through gsKit. VRAM residency is handled by gsKit's TexManager.
+struct GsKitGfx : GfxInterface
 {
-    UNIFORM_MODELVIEW,
-    UNIFORM_PROJECTION,
-    UNIFORM_TEXTURE_MATRIX,
-    UNIFORM_ENV_DIFFUSE,
-    UNIFORM_TEX_COORD_FLAG,
-    UNIFORM_DIFFUSE_FLAG,
-    UNIFORM_TEXTURE_SAMPLER,
-    UNIFORM_FOG_NEAR,
-    UNIFORM_FOG_FAR,
-    UNIFORM_FOG_COLOR,
-    UNIFORM_COLOR_OP,
-    UNIFORMS_COUNT
-};
-
-struct WebGL : GfxInterface
-{
-    static void SetContextFlags();
-    static GfxInterface *Create();
-
-    bool Init();
-    virtual void Exit();
-    ~WebGL() override
-    {
-        Exit();
-    };
+    static GfxInterface *Init();
+    ~GsKitGfx() override;
 
     virtual void SetFogRange(f32 nearPlane, f32 farPlane);
     virtual void SetFogColor(ZunColor color);
@@ -49,7 +29,11 @@ struct WebGL : GfxInterface
     virtual void SetDepthRange(f32 nearPlane, f32 farPlane);
 
     virtual void Enable(Capabilities cap);
-    virtual bool HasError();
+    virtual bool HasError()
+    {
+        return false;
+    }
+
     virtual void SetBlendMode(BlendMode mode);
     virtual void SetDepthMask(bool enable);
     virtual void SetDepthFunc(DepthFunc func);
@@ -70,13 +54,41 @@ struct WebGL : GfxInterface
     virtual void SwapBuffers();
 
   private:
-    SDL_Window *window;
-    SDL_GLContext glContext;
-    bool glesContext;
+    GSGLOBAL *gs = nullptr;
 
-    GLuint fragmentShaderHandle;
-    GLuint vertexShaderHandle;
-    GLuint programHandle;
+    std::vector<GSTEXTURE *> textures;
+    std::vector<u32> freeTextures;
+    GSTEXTURE *boundTexture = nullptr;
 
-    GLint uniforms[UNIFORMS_COUNT];
+    ZunMatrix model, view, projection, textureMatrix;
+
+    i32 viewport[4] = {0, 0, 0, 0};
+    f32 depthNear = 0.0f, depthFar = 1.0f;
+    bool useDepthTest = false;
+    bool depthMask = true;
+    DepthFunc depthFunc = DEPTH_FUNC_LEQUAL;
+
+    BlendMode blendMode = BLEND_INV_SRC_ALPHA;
+    ZunColor textureFactor = 0xFFFFFFFF;
+    ZunColor clearColor = 0;
+    f32 fogNear = 0.0f, fogFar = 1.0f;
+    ZunColor fogColor = 0;
+
+    void *vertexData = nullptr;
+    std::size_t vertexStride = 0;
+    void *texCoordData = nullptr;
+    std::size_t texCoordStride = 0;
+    void *diffuseData = nullptr;
+    std::size_t diffuseStride = 0;
+    bool useTexCoord = false;
+    bool useDiffuse = false;
+
+    // Output scale from the game's 640x480 space to the GS framebuffer
+    f32 scaleX = 1.0f, scaleY = 1.0f;
+
+    void ApplyTest();
+    void ApplyScissor();
+    void ApplyDepthMask();
+    void ApplyFrameMask(u32 mask);
+    void FreeTextureData(GSTEXTURE *tex);
 };

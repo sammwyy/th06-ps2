@@ -24,6 +24,16 @@ static const u8 g_RandomItems[32] = {
     ITEM_POINT,       ITEM_POWER_SMALL, ITEM_POWER_SMALL, ITEM_POINT,       ITEM_POINT,       ITEM_POINT,
     ITEM_POWER_SMALL, ITEM_POWER_BIG};
 
+static void DrawEnemyGameplaySprite2d(AnmVm *vm)
+{
+    ZunVec3 savedPos = vm->pos;
+
+    vm->pos.x += g_GameManager.arcadeRegionTopLeftPos.x;
+    vm->pos.y += g_GameManager.arcadeRegionTopLeftPos.y;
+    g_AnmManager->Draw(vm);
+    vm->pos = savedPos;
+}
+
 void EnemyManager::Initialize()
 {
     i32 i;
@@ -765,8 +775,12 @@ ChainCallbackResult EnemyManager::OnDraw(EnemyManager *mgr)
 {
     AnmVm *curEnemyVm;
     Enemy *curEnemy;
+    Enemy *firstActiveEnemy = NULL;
+    i32 activeEnemyCount = 0;
     i32 curEnemyVmIdx;
     i32 curEnemyIdx;
+
+    g_AnmManager->SetDepthFunc(DEPTH_FUNC_ALWAYS);
 
     for (curEnemy = &mgr->enemies[0], curEnemyIdx = 0; curEnemyIdx < ARRAY_SIZE_SIGNED(mgr->enemies) - 1;
          curEnemyIdx++, curEnemy++)
@@ -779,6 +793,11 @@ ChainCallbackResult EnemyManager::OnDraw(EnemyManager *mgr)
         {
             continue;
         }
+        activeEnemyCount++;
+        if (firstActiveEnemy == NULL)
+        {
+            firstActiveEnemy = curEnemy;
+        }
 
         for (curEnemyVm = &curEnemy->vms[0], curEnemyVmIdx = 0; curEnemyVmIdx < 4; curEnemyVmIdx++, curEnemyVm++)
         {
@@ -790,7 +809,7 @@ ChainCallbackResult EnemyManager::OnDraw(EnemyManager *mgr)
                 }
                 curEnemyVm->pos = curEnemy->position + curEnemyVm->posOffset;
                 curEnemyVm->pos.z = 0.495f;
-                g_AnmManager->Draw2(curEnemyVm);
+                DrawEnemyGameplaySprite2d(curEnemyVm);
                 g_AnmManager->FlushVertexBuffer();
             }
         }
@@ -800,7 +819,7 @@ ChainCallbackResult EnemyManager::OnDraw(EnemyManager *mgr)
         }
         curEnemy->primaryVm.pos = curEnemy->position + curEnemy->primaryVm.posOffset;
         curEnemy->primaryVm.pos.z = 0.494f;
-        g_AnmManager->Draw2(&curEnemy->primaryVm);
+        DrawEnemyGameplaySprite2d(&curEnemy->primaryVm);
         g_AnmManager->FlushVertexBuffer();
         for (curEnemyVmIdx = 4; curEnemyVmIdx < 8; curEnemyVmIdx++, curEnemyVm++)
         {
@@ -812,10 +831,23 @@ ChainCallbackResult EnemyManager::OnDraw(EnemyManager *mgr)
                 }
                 curEnemyVm->pos = curEnemy->position + curEnemyVm->posOffset;
                 curEnemyVm->pos.z = 0.495f;
-                g_AnmManager->Draw2(curEnemyVm);
+                DrawEnemyGameplaySprite2d(curEnemyVm);
             }
         }
     }
+    static i32 enemyDrawLogCount = 0;
+    if (firstActiveEnemy != NULL && enemyDrawLogCount < 40)
+    {
+        AnmVm *vm = &firstActiveEnemy->primaryVm;
+        utils::DebugPrint2("EnemyDraw active=%d pos=(%d,%d,%d) vm=(%d,%d,%d) anm=%d sprite=%d color=%08x vis=%d flag1=%d src=%d",
+                           activeEnemyCount, (i32)firstActiveEnemy->position.x, (i32)firstActiveEnemy->position.y,
+                           (i32)firstActiveEnemy->position.z, (i32)vm->pos.x, (i32)vm->pos.y, (i32)vm->pos.z,
+                           vm->anmFileIndex, vm->activeSpriteIndex, vm->color, vm->flags.isVisible, vm->flags.flag1,
+                           vm->sprite ? vm->sprite->sourceFileIndex : -1);
+        enemyDrawLogCount++;
+    }
+    g_AnmManager->FlushVertexBuffer();
+    g_AnmManager->SetDepthFunc(DEPTH_FUNC_LEQUAL);
     return CHAIN_CALLBACK_RESULT_CONTINUE;
 }
 

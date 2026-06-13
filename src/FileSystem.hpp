@@ -14,5 +14,12 @@ FILE *FopenUTF8(const char *filepath, const char *mode);
 void CreateDir(const char *path);
 u8 *OpenPath(const char *filepath, int isExternalResource);
 int WriteDataToFile(const char *path, const void *data, std::size_t size);
+
+// Sets the directory game files are resolved against (derived from argv[0] on
+// PS2, so data loads from wherever the .elf was launched: mass:/, host:/, ...).
+void SetBasePath(const char *argv0);
+// Prepends the base path to relative paths that lack a device prefix.
+// Writes into dst (size bytes) and returns it.
+const char *ResolvePath(const char *path, char *dst, std::size_t size);
 } // namespace FileSystem
 extern u32 g_LastFileSize;

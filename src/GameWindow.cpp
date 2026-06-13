@@ -6,9 +6,7 @@
 #include "Stage.hpp"
 #include "Supervisor.hpp"
 #include "ZunMath.hpp"
-#include "graphics/FixedFunctionGL.hpp"
-#include "graphics/Software.hpp"
-#include "graphics/WebGL.hpp"
+#include "graphics/GsKitGfx.hpp"
 #include "i18n.hpp"
 #include "utils.hpp"
 
@@ -27,9 +25,7 @@ static const struct
 {
     const char *name;
     GfxInterface *(*TryInit)();
-} s_RenderBackends[] = {{"GL 2.1 / GL ES 2.0 / WebGL", WebGL::Create},
-                        {"Fixed function GL(ES)", FixedFunctionGL::Init},
-                        {"Software fallback (VERY SLOW)", Software::Init}};
+} s_RenderBackends[] = {{"gsKit (PS2)", GsKitGfx::Init}};
 
 RenderResult GameWindow::Render()
 {
@@ -184,7 +180,9 @@ void GameWindow::Present()
 
 void GameWindow::CreateGameWindow()
 {
-    SDL_Init(SDL_INIT_GAMECONTROLLER);
+    // Only events here: SDL's gamecontroller subsystem would init the PS2 pad
+    // through the multitap, which hangs when the multitap RPC is unavailable
+    SDL_Init(SDL_INIT_EVENTS);
 
     for (u32 i = 0; i < ARRAY_SIZE(s_RenderBackends); i++)
     {

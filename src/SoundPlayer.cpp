@@ -7,11 +7,24 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_timer.h>
-#include <array>
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <new>
-#include <vector>
+
+#ifdef _EE
+#include <audsrv.h>
+#include <loadfile.h>
+
+// SPU2 audio is fed through audsrv from the main loop. Keep this as a switch
+// while debugging emulator/IOP timing issues.
+#define TH_PS2_ENABLE_AUDSRV 1
+
+// One video frame of stereo 16-bit audio at 44100 Hz (44100 / 60 frames)
+#define PS2_AUDIO_FREQ 44100
+#define PS2_FRAME_SAMPLES 735
+#define PS2_FRAME_BYTES (PS2_FRAME_SAMPLES * 2 * 2)
+#endif
 
 // This would all be a lot easier with SDL_mixer, but SDL_mixer doesn't permit any way of doing custom
 //   loop points that would be accurate to the sample like EoSD needs. So instead we get to read WAVs and
@@ -55,6 +68,64 @@ ZunResult SoundPlayer::InitializeDSound()
     SDL_AudioSpec desiredAudio;
     SDL_AudioSpec obtainedAudio;
 
+#ifdef _EE
+#if !TH_PS2_ENABLE_AUDSRV
+    // Audio disabled: leave the device closed so the game runs silently
+    this->audioDev = 0;
+    utils::DebugPrint2("SoundPlayer: audio disabled on PS2");
+    return ZUN_SUCCESS;
+#else
+    // PS2 audio goes through audsrv (SPU2), fed from the main loop in PlaySounds.
+    int loadRet;
+
+    utils::DebugPrint2("SoundPlayer: loading LIBSD");
+    loadRet = SifLoadModule("rom0:LIBSD", 0, NULL);
+    if (loadRet < 0)
+    {
+        utils::DebugPrint2("SoundPlayer: LIBSD load failed %d", loadRet);
+        this->audioDev = 0;
+        return ZUN_ERROR;
+    }
+
+    utils::DebugPrint2("SoundPlayer: loading audsrv.irx");
+    loadRet = SifLoadModule("host:audsrv.irx", 0, NULL);
+    if (loadRet < 0)
+    {
+        utils::DebugPrint2("SoundPlayer: audsrv.irx load failed %d", loadRet);
+        this->audioDev = 0;
+        return ZUN_ERROR;
+    }
+
+    utils::DebugPrint2("SoundPlayer: audsrv_init");
+    if (audsrv_init() != AUDSRV_ERR_NOERROR)
+    {
+        utils::DebugPrint2("SoundPlayer: audsrv_init failed %d", audsrv_get_error());
+        this->audioDev = 0;
+        return ZUN_ERROR;
+    }
+
+    {
+        struct audsrv_fmt_t fmt;
+        fmt.freq = PS2_AUDIO_FREQ;
+        fmt.bits = 16;
+        fmt.channels = 2;
+        if (audsrv_set_format(&fmt) != 0)
+        {
+            utils::DebugPrint2("SoundPlayer: audsrv_set_format failed");
+            audsrv_quit();
+            this->audioDev = 0;
+            return ZUN_ERROR;
+        }
+    }
+    audsrv_set_volume(MAX_VOLUME);
+
+    // audioDev is only used as a "sound is available" flag on PS2
+    this->audioDev = 1;
+    utils::DebugPrint2("SoundPlayer: audsrv ready");
+    return ZUN_SUCCESS;
+#endif // TH_PS2_ENABLE_AUDSRV
+#endif // _EE
+
     if (SDL_InitSubSystem(SDL_INIT_AUDIO))
     {
         goto fail;
@@ -74,7 +145,12 @@ ZunResult SoundPlayer::InitializeDSound()
         goto fail;
     }
 
+#ifndef _EE
+    // The background mixer runs on its own thread on desktop. On PS2 the pthread
+    // backing for std::thread is unreliable and audio is non-essential, so the
+    // thread is not started here (sound stays silent but the game runs).
     this->backgroundMusicThreadHandle = std::thread(&SoundPlayer::BackgroundMusicPlayerThread, this);
+#endif
 
     g_GameErrorContext.Log(TH_DBG_SOUNDPLAYER_INIT_SUCCESS);
     return ZUN_SUCCESS;
@@ -87,7 +163,10 @@ fail:
 ZunResult SoundPlayer::Release(void)
 {
     this->terminateFlag = true;
-    this->backgroundMusicThreadHandle.join();
+    if (this->backgroundMusicThreadHandle.joinable())
+    {
+        this->backgroundMusicThreadHandle.join();
+    }
     this->terminateFlag = false;
 
     StopBGM();
@@ -104,7 +183,12 @@ ZunResult SoundPlayer::Release(void)
 
     if (this->audioDev != 0)
     {
+#ifdef _EE
+        audsrv_stop_audio();
+        audsrv_quit();
+#else
         SDL_CloseAudioDevice(this->audioDev);
+#endif
         this->audioDev = 0;
     }
 
@@ -154,11 +238,13 @@ ZunResult SoundPlayer::LoadWav(const char *path)
 
     utils::DebugPrint2("load BGM\n");
 
-    fileStream = SDL_RWFromFile(path, "r");
+    char resolvedPath[512];
+    FileSystem::ResolvePath(path, resolvedPath, sizeof(resolvedPath));
+    fileStream = SDL_RWFromFile(resolvedPath, "rb");
 
     if (fileStream == NULL)
     {
-        utils::DebugPrint2("error : wav file load error %s\n", path);
+        utils::DebugPrint2("error : wav file load error %s\n", resolvedPath);
         return ZUN_ERROR;
     }
 
@@ -258,6 +344,7 @@ ZunResult SoundPlayer::LoadWav(const char *path)
 
     this->backgroundMusic.srcWav.fileStream = fileStream;
     this->backgroundMusic.srcWav.dataStartOffset = SDL_RWtell(fileStream);
+    this->ResetBgmStreamBuffer();
     this->backgroundMusic.loopStart = 0;
     this->backgroundMusic.loopEnd = this->backgroundMusic.srcWav.samples;
     this->backgroundMusic.fadeoutLen = 0;
@@ -335,7 +422,7 @@ ZunResult SoundPlayer::LoadSound(i32 idx, const char *path, f32 volumeMultiplier
     SDL_AudioSpec wavFormat;
     u8 *wavRawData;
     u8 *wavRawSamples;
-    u32 wavRawSampleByteCount;
+    Uint32 wavRawSampleByteCount;
 
     soundBufMutex.lock();
 
@@ -431,6 +518,9 @@ ZunResult SoundPlayer::PlayBGM(bool isLooping)
     //    }
     utils::DebugPrint2("comp\n");
     this->isLooping = isLooping;
+    this->backgroundMusic.pos = 0;
+    this->ResetBgmStreamBuffer();
+    SDL_RWseek(this->backgroundMusic.srcWav.fileStream, this->backgroundMusic.srcWav.dataStartOffset, SEEK_SET);
     return ZUN_SUCCESS;
 }
 
@@ -466,6 +556,17 @@ void SoundPlayer::PlaySounds()
     }
 
     soundBufMutex.unlock();
+
+#ifdef _EE
+    // No mixer thread on PS2: top up the audsrv ring buffer from here every
+    // frame, only mixing while there is room so audsrv_play_audio never blocks.
+    int budget = audsrv_available();
+    while (budget >= PS2_FRAME_BYTES)
+    {
+        MixAudio(PS2_FRAME_SAMPLES * 2);
+        budget -= PS2_FRAME_BYTES;
+    }
+#endif
 }
 
 void SoundPlayer::PlaySoundByIdx(SoundIdx idx)
@@ -493,11 +594,59 @@ void SoundPlayer::PlaySoundByIdx(SoundIdx idx)
     this->soundBuffersToPlay[i] = idx;
 }
 
+void SoundPlayer::ResetBgmStreamBuffer()
+{
+    this->backgroundMusic.srcWav.streamBufferFrames = 0;
+    this->backgroundMusic.srcWav.streamBufferPos = 0;
+}
+
+u32 SoundPlayer::ReadBgmFrames(i16 *dst, u32 frames)
+{
+    WavData *wav = &this->backgroundMusic.srcWav;
+    u32 framesRead = 0;
+
+    while (framesRead < frames && wav->fileStream != NULL)
+    {
+        if (this->backgroundMusic.pos >= this->backgroundMusic.loopEnd)
+        {
+            break;
+        }
+
+        if (wav->streamBufferPos >= wav->streamBufferFrames)
+        {
+            const u32 framesLeftInLoop = this->backgroundMusic.loopEnd - this->backgroundMusic.pos;
+            const u32 framesToRead = std::min(BGM_STREAM_BUFFER_FRAMES, framesLeftInLoop);
+
+            wav->streamBufferFrames =
+                SDL_RWread(wav->fileStream, wav->streamBuffer.data(), BACKGROUND_MUSIC_WAV_BLOCK_ALIGN, framesToRead);
+            wav->streamBufferPos = 0;
+
+            if (wav->streamBufferFrames == 0)
+            {
+                break;
+            }
+        }
+
+        const u32 framesAvailable = wav->streamBufferFrames - wav->streamBufferPos;
+        const u32 framesToCopy = std::min(frames - framesRead, framesAvailable);
+
+        std::memcpy(dst + framesRead * 2, wav->streamBuffer.data() + wav->streamBufferPos * 2,
+                    framesToCopy * BACKGROUND_MUSIC_WAV_BLOCK_ALIGN);
+        wav->streamBufferPos += framesToCopy;
+        this->backgroundMusic.pos += framesToCopy;
+        framesRead += framesToCopy;
+    }
+
+    return framesRead;
+}
+
 void SoundPlayer::MixAudio(u32 samples)
 {
-    std::vector<i16> finalBuffer(samples);
-    std::vector<i32> mixBuffer(samples);
     u8 playingChannels = 0;
+
+    samples = std::min(samples, MIX_BUFFER_SAMPLES);
+    std::fill_n(this->finalMixBuffer.begin(), samples, 0);
+    std::fill_n(this->mixAccumBuffer.begin(), samples, 0);
 
     this->soundBufMutex.lock();
 
@@ -515,8 +664,8 @@ void SoundPlayer::MixAudio(u32 samples)
 
         for (u32 j = 0; j < samplesToMix; j++)
         {
-            mixBuffer[j * 2] += this->soundBuffers[i].samples[this->soundBuffers[i].pos + j];
-            mixBuffer[j * 2 + 1] += this->soundBuffers[i].samples[this->soundBuffers[i].pos + j];
+            this->mixAccumBuffer[j * 2] += this->soundBuffers[i].samples[this->soundBuffers[i].pos + j];
+            this->mixAccumBuffer[j * 2 + 1] += this->soundBuffers[i].samples[this->soundBuffers[i].pos + j];
         }
 
         this->soundBuffers[i].pos += samplesToMix;
@@ -545,27 +694,27 @@ void SoundPlayer::MixAudio(u32 samples)
 
         while (samplesMixed < samples / 2)
         {
-            const u32 samplesToMix =
-                std::min((samples / 2) - samplesMixed, this->backgroundMusic.loopEnd - this->backgroundMusic.pos);
+            const u32 samplesToMix = std::min((samples / 2) - samplesMixed, BGM_STREAM_BUFFER_FRAMES);
+            const u32 samplesRead = this->ReadBgmFrames(this->bgmMixBuffer.data(), samplesToMix);
 
-            for (u32 j = 0; j < samplesToMix; j++)
+            for (u32 j = 0; j < samplesRead; j++)
             {
-                mixBuffer[samplesMixed + j * 2] +=
-                    ((i16)SDL_ReadLE16(this->backgroundMusic.srcWav.fileStream)) * fadeoutMult;
-                mixBuffer[samplesMixed + j * 2 + 1] +=
-                    ((i16)SDL_ReadLE16(this->backgroundMusic.srcWav.fileStream)) * fadeoutMult;
+                this->mixAccumBuffer[(samplesMixed + j) * 2] += this->bgmMixBuffer[j * 2] * fadeoutMult;
+                this->mixAccumBuffer[(samplesMixed + j) * 2 + 1] += this->bgmMixBuffer[j * 2 + 1] * fadeoutMult;
             }
 
-            this->backgroundMusic.pos += samplesToMix;
-            samplesMixed += samplesToMix;
+            samplesMixed += samplesRead;
 
             if (this->backgroundMusic.pos == this->backgroundMusic.loopEnd)
             {
                 if (this->isLooping)
                 {
                     this->backgroundMusic.pos = this->backgroundMusic.loopStart;
+                    this->ResetBgmStreamBuffer();
                     SDL_RWseek(this->backgroundMusic.srcWav.fileStream,
-                               this->backgroundMusic.srcWav.dataStartOffset + this->backgroundMusic.pos * 4, SEEK_SET);
+                               this->backgroundMusic.srcWav.dataStartOffset +
+                                   this->backgroundMusic.pos * BACKGROUND_MUSIC_WAV_BLOCK_ALIGN,
+                               SEEK_SET);
                 }
                 else
                 {
@@ -574,6 +723,11 @@ void SoundPlayer::MixAudio(u32 samples)
 
                     break;
                 }
+            }
+
+            if (samplesRead == 0)
+            {
+                break;
             }
         }
 
@@ -607,10 +761,14 @@ void SoundPlayer::MixAudio(u32 samples)
         //   a problem, it could be a good idea to convert to float, or to do the division as
         //   fixed point multiplication by the inverse of mixDivisor, depending on what's faster
         //   on any particular platform
-        finalBuffer[i] = mixBuffer[i] / mixDivisor;
+        this->finalMixBuffer[i] = this->mixAccumBuffer[i] / mixDivisor;
     }
 
-    SDL_QueueAudio(this->audioDev, finalBuffer.data(), samples * 2);
+#ifdef _EE
+    audsrv_play_audio((const char *)this->finalMixBuffer.data(), samples * 2);
+#else
+    SDL_QueueAudio(this->audioDev, this->finalMixBuffer.data(), samples * 2);
+#endif
 }
 
 // EoSD originally just used this function to manage the streaming of the music WAV file.

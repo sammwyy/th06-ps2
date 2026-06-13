@@ -4,9 +4,13 @@
 #include "inttypes.hpp"
 #include <SDL2/SDL_audio.h>
 #include <SDL2/SDL_rwops.h>
+#include <array>
 #include <atomic>
 #include <mutex>
 #include <thread>
+
+static constexpr u32 BGM_STREAM_BUFFER_FRAMES = 4096;
+static constexpr u32 MIX_BUFFER_SAMPLES = 4096;
 
 enum SoundIdx
 {
@@ -64,6 +68,9 @@ struct WavData
     SDL_RWops *fileStream;
     u32 dataStartOffset;
     u32 samples;
+    std::array<i16, BGM_STREAM_BUFFER_FRAMES * 2> streamBuffer;
+    u32 streamBufferFrames;
+    u32 streamBufferPos;
 };
 
 struct MusicStream
@@ -96,6 +103,8 @@ struct SoundPlayer
 
     void BackgroundMusicPlayerThread();
     void MixAudio(u32 samples);
+    void ResetBgmStreamBuffer();
+    u32 ReadBgmFrames(i16 *dst, u32 frames);
 
     SoundData soundBuffers[128];
     std::mutex soundBufMutex;
@@ -105,6 +114,9 @@ struct SoundPlayer
     i32 soundBuffersToPlay[3];
     MusicStream backgroundMusic;
     bool isLooping;
+    std::array<i16, MIX_BUFFER_SAMPLES> finalMixBuffer;
+    std::array<i32, MIX_BUFFER_SAMPLES> mixAccumBuffer;
+    std::array<i16, BGM_STREAM_BUFFER_FRAMES * 2> bgmMixBuffer;
 };
 
 extern SoundPlayer g_SoundPlayer;

@@ -1097,6 +1097,32 @@ ChainCallbackResult BulletManager::OnDraw(BulletManager *mgr)
     f32 cosine;
     Bullet *curBullet1;
     Bullet *curBullet2;
+    i32 activeBulletCount = 0;
+    Bullet *firstActiveBullet = NULL;
+
+    for (curBullet1 = &mgr->bullets[0], idx = 0; idx < ARRAY_SIZE_SIGNED(mgr->bullets); idx++, curBullet1++)
+    {
+        if (curBullet1->state != 0)
+        {
+            activeBulletCount++;
+            if (firstActiveBullet == NULL)
+            {
+                firstActiveBullet = curBullet1;
+            }
+        }
+    }
+
+    static i32 bulletDrawLogCount = 0;
+    if (firstActiveBullet != NULL && bulletDrawLogCount < 40)
+    {
+        AnmVm *vm = &firstActiveBullet->sprites.spriteBullet;
+        utils::DebugPrint2("BulletDraw active=%d hw=%d state=%d pos=(%d,%d,%d) vm=(%d,%d,%d) anm=%d sprite=%d color=%08x vis=%d flag1=%d h=%d",
+                           activeBulletCount, g_Supervisor.hasD3dHardwareVertexProcessing, firstActiveBullet->state,
+                           (i32)firstActiveBullet->pos.x, (i32)firstActiveBullet->pos.y, (i32)firstActiveBullet->pos.z,
+                           (i32)vm->pos.x, (i32)vm->pos.y, (i32)vm->pos.z, vm->anmFileIndex, vm->activeSpriteIndex,
+                           vm->color, vm->flags.isVisible, vm->flags.flag1, firstActiveBullet->sprites.bulletHeight);
+        bulletDrawLogCount++;
+    }
 
     g_AnmManager->SetDepthFunc(DEPTH_FUNC_ALWAYS);
 
@@ -1254,6 +1280,7 @@ ChainCallbackResult BulletManager::OnDraw(BulletManager *mgr)
         }
     }
 
+    g_AnmManager->FlushVertexBuffer();
     g_AnmManager->SetDepthFunc(DEPTH_FUNC_LEQUAL);
 
     return CHAIN_CALLBACK_RESULT_CONTINUE;

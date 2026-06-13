@@ -1,4 +1,5 @@
 #include "Stage.hpp"
+#include "MemAlloc.hpp"
 #include "AnmIdx.hpp"
 #include "AnmManager.hpp"
 #include "Chain.hpp"
@@ -298,11 +299,19 @@ ChainCallbackResult Stage::OnDrawLowPrio(Stage *stage)
     GameManager::SetupCameraStageBackground(0);
     g_Supervisor.viewport.Set();
     g_AnmManager->SetFogRange(1'000.0f, 2'000.0f);
+
+    g_AnmManager->FlushVertexBuffer();
+    g_Supervisor.viewport.minZ = 0.5;
+    g_Supervisor.viewport.maxZ = 1.0;
+    GameManager::SetupCamera(0);
+    g_Supervisor.viewport.Set();
     return CHAIN_CALLBACK_RESULT_CONTINUE;
 }
 
 ZunResult Stage::AddedCallback(Stage *stage)
 {
+    g_SceneArena.Reset();
+
     ZunTimer *facingDirTimer;
     ZunTimer *scriptTimer;
 

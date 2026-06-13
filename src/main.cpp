@@ -1,8 +1,9 @@
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_mouse.h>
 #include <cstdio>
 
 #include "AnmManager.hpp"
+#include "Ps2Pad.hpp"
+#include "MemAlloc.hpp"
 #include "Chain.hpp"
 #include "FileSystem.hpp"
 #include "GameErrorContext.hpp"
@@ -16,10 +17,31 @@
 
 int main(int argc, char *argv[])
 {
-    (void)argc;
-    (void)argv;
-
     i32 renderResult = 0;
+
+    // Unbuffered stdout so debug logs survive a crash / hang
+    setbuf(stdout, NULL);
+
+    // Resolve game data relative to wherever the .elf was launched from
+    FileSystem::SetBasePath(argc > 0 ? argv[0] : NULL);
+
+    // Mirror debug output to a file next to the .elf (EE stdout is not always
+    // visible in emulators)
+    char logPath[512];
+    FileSystem::ResolvePath("th06_log.txt", logPath, sizeof(logPath));
+    utils::InitDebugLog(logPath);
+    utils::DebugPrint2("boot: base path resolved, log at %s\n", logPath);
+
+    // SDL's PS2 joystick backend goes through the multitap (mtapInit), which
+    // hangs when the multitap RPC never comes up. Read joypad 1 natively instead.
+    Ps2Pad::Init();
+
+    if (!MemArenas::InitAll())
+    {
+        utils::DebugPrint2("boot: arena init failed\n");
+        return -1;
+    }
+
     //    MSG msg;
     //    i32 waste1, waste2, waste3, waste4, waste5, waste6;
 
@@ -32,8 +54,10 @@ int main(int argc, char *argv[])
 
     //    g_Supervisor.hInstance = hInstance;
 
+    utils::DebugPrint2("boot: loading config %s\n", TH_CONFIG_FILE);
     if (g_Supervisor.LoadConfig(TH_CONFIG_FILE) != ZUN_SUCCESS)
     {
+        utils::DebugPrint2("boot: LoadConfig failed, aborting\n");
         g_GameErrorContext.Flush();
         return -1;
     }
@@ -52,29 +76,32 @@ int main(int argc, char *argv[])
     //    SystemParametersInfo(SPI_SETPOWEROFFACTIVE, 0, NULL, SPIF_SENDCHANGE);
 
 restart:
+    utils::DebugPrint2("boot: creating game window / renderer\n");
     GameWindow::CreateGameWindow();
 
     g_AnmManager = new AnmManager();
 
+    utils::DebugPrint2("boot: init rendering\n");
     if (GameWindow::InitD3dRendering() != ZUN_SUCCESS)
     {
+        utils::DebugPrint2("boot: InitD3dRendering failed, aborting\n");
         g_GameErrorContext.Flush();
         return 1;
     }
 
+    utils::DebugPrint2("boot: init sound / input\n");
     g_SoundPlayer.InitializeDSound();
     Controller::GetJoystickCaps();
     Controller::ResetKeyboard();
 
+    utils::DebugPrint2("boot: registering supervisor chain\n");
     if (Supervisor::RegisterChain() != ZUN_SUCCESS)
     {
+        utils::DebugPrint2("boot: RegisterChain failed, stopping\n");
         goto stop;
     }
-    if (!g_Supervisor.cfg.windowed)
-    {
-        SDL_ShowCursor(SDL_DISABLE);
-    }
 
+    utils::DebugPrint2("boot: entering main loop\n");
     g_GameWindow.curFrame = 0;
 
     while (true)
@@ -144,20 +171,14 @@ stop:
 
         g_GameErrorContext.Log(TH_ERR_OPTION_CHANGED_RESTART);
 
-        if (!g_Supervisor.cfg.windowed)
-        {
-            SDL_ShowCursor(SDL_ENABLE);
-        }
-
         goto restart;
     }
 
     FileSystem::WriteDataToFile(TH_CONFIG_FILE, &g_Supervisor.cfg, sizeof(g_Supervisor.cfg));
-    //    SystemParametersInfo(SPI_SETSCREENSAVEACTIVE, g_GameWindow.screenSaveActive, NULL, SPIF_SENDCHANGE);
-    //    SystemParametersInfo(SPI_SETLOWPOWERACTIVE, g_GameWindow.lowPowerActive, NULL, SPIF_SENDCHANGE);
-    //    SystemParametersInfo(SPI_SETPOWEROFFACTIVE, g_GameWindow.powerOffActive, NULL, SPIF_SENDCHANGE);
 
-    SDL_ShowCursor(SDL_ENABLE);
+    MemArenas::DestroyAll();
     g_GameErrorContext.Flush();
+    utils::DebugPrint2("boot: clean exit\n");
+    utils::CloseDebugLog();
     return 0;
 }

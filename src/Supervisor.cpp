@@ -613,7 +613,26 @@ i32 Supervisor::LoadPbg3(i32 pbg3FileIdx, const char *filename)
         this->ReleasePbg3(pbg3FileIdx);
         this->pbg3Archives[pbg3FileIdx] = new Pbg3Archive();
         utils::DebugPrint("%s open ...\n", filename);
-        if (this->pbg3Archives[pbg3FileIdx]->Load(filename) != 0)
+        i32 loaded = this->pbg3Archives[pbg3FileIdx]->Load(filename);
+        if (loaded == 0)
+        {
+            // Retail archives have multibyte (Japanese) names. If that file is
+            // absent, retry with the plain ASCII tail (e.g. IN.DAT), which is
+            // how the data is often stored on non-Japanese filesystems.
+            const char *asciiTail = filename;
+            while ((u8)*asciiTail >= 0x80)
+            {
+                asciiTail++;
+            }
+            if (asciiTail != filename && *asciiTail != '\0')
+            {
+                utils::DebugPrint("%s open (ascii fallback) ...\n", asciiTail);
+                delete this->pbg3Archives[pbg3FileIdx];
+                this->pbg3Archives[pbg3FileIdx] = new Pbg3Archive();
+                loaded = this->pbg3Archives[pbg3FileIdx]->Load(asciiTail);
+            }
+        }
+        if (loaded != 0)
         {
             std::strcpy(this->pbg3ArchiveNames[pbg3FileIdx], filename);
 

@@ -1,6 +1,6 @@
 #include "GameErrorContext.hpp"
 #include "FileSystem.hpp"
-#include <SDL2/SDL_messagebox.h>
+#include "utils.hpp"
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -65,14 +65,15 @@ void GameErrorContext::Flush()
     {
         g_GameErrorContext.Log(TH_ERR_LOGGER_END);
 
-        if (m_ShowMessageBox)
+        // Always mirror the error buffer to the debug log so it is visible even
+        // when no writable log file can be created
+        utils::DebugPrint2("---- error log ----\n%s\n-------------------\n", m_Buffer);
+
+        logFile = FileSystem::FopenUTF8("log.txt", "w");
+        if (logFile != NULL)
         {
-            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "log", m_Buffer, NULL);
+            std::fprintf(logFile, "%s", m_Buffer);
+            std::fclose(logFile);
         }
-
-        logFile = FileSystem::FopenUTF8("./log.txt", "w");
-
-        std::fprintf(logFile, "%s", m_Buffer);
-        std::fclose(logFile);
     }
 }

@@ -1,82 +1,51 @@
-[![Discord][discord-badge]][discord] <- click here to join discord server.
+# EoSD-PS2
 
-[discord]: https://discord.gg/VyGwAjrh9a
-[discord-badge]: https://img.shields.io/discord/1147558514840064030?color=%237289DA&logo=discord&logoColor=%23FFFFFF
+A native PlayStation 2 port of Touhou 6 (The Embodiment of Scarlet Devil),
+based on the GensokyoClub decompilation and its SDL2 "portable" fork.
 
-This is the readme for the portable fork of EoSD. For the readme of the decomp project, see [here](https://github.com/GensokyoClub/th06/blob/master/README.md).
+The Direct3D/OpenGL rendering path has been replaced with a gsKit backend that
+drives the GS directly. SDL2 (via the ps2dev port) is still used for input,
+timing, WAV decoding and TTF text staging, none of which touch the GS.
 
-EoSD-portable is a port of Touhou 6 using SDL2 and OpenGL (with a more general renderer abstraction layer hopefully on the way).
-This enables theoretical portability to any system supported by SDL2, with Linux, Windows, and macOS in particular being known to work.
-Builds for the BSDs and other Unices are also almost certainly possible, but may require some slight modifications to the build system.
+### What changed from the portable fork
 
-### Platform Requirements
+- New renderer `src/graphics/GsKitGfx.cpp` implementing `GfxInterface` on gsKit.
+  Vertices are transformed on the EE and submitted as gouraud / textured GS
+  triangles; VRAM residency is handled by gsKit's TexManager.
+- All non-PS2 backends were removed (WebGL, fixed-function GL, software
+  rasterizer) along with the desktop MIDI backends (only the MIDI stub remains)
+  and the standalone config tool.
+- A single memory module `src/MemAlloc.cpp`: the `MemAlloc` namespace is the
+  global allocator (a `malloc`/`free` wrapper for process-lifetime data), and
+  `MemArena` is a bump allocator for level-scoped memory, backed by `MemAlloc`
+  and spilling to it on overflow. Two arenas exist: a per-stage `g_SceneArena`
+  (reset on each `Stage::AddedCallback`) and a per-frame `g_FrameArena`.
+- A plain `Makefile` (no premake) that builds with the ps2dev EE toolchain.
 
-- SDL2, SDL2-image, and SDL2-ttf support
-- C++20 standard library support
-- A little endian architecture (though big endian support is currently being worked on)
-- OpenGL ES 1.1, OpenGL 1.3, or GL 2.1 / GL ES 2.0 / WebGL support
+### Building
 
-### Dependencies
+Requires the [ps2dev](https://github.com/ps2dev/ps2dev) toolchain with gsKit and
+the SDL2 ports installed (the `PS2DEV` env var must point at the install, default
+`/usr/local/ps2dev`).
 
-EoSD-portable has the following dependencies:
+```
+make            # produces build/th06.elf
+make clean
+```
 
-- `SDL2`
-- `SDL2_image`
-- `SDL2_ttf`
-- `libasound` (Optional and Linux-only, enables MIDI support. This will almost always be present as part of a desktop distro.)
+### Running
 
-On Windows and macOS, MIDI support uses the system APIs and needs no extra dependencies.
+`build/th06.elf` can be launched in PCSX2 or on real hardware. The game data
+files (the Japanese-named `.DAT` archives) must be reachable through the path the
+host loader provides (e.g. `mass:/`, `host:/`, or `cdrom:/`); adjust the paths in
+`FileSystem.cpp` for your loader if needed.
 
-In addition, building uses [`premake5`](https://premake.github.io/download) and a compiler that supports C++20.
+### Status / known gaps
 
-#### Building
-
-In the repository root directory, run `premake5` with the desired build system as an argument (a list can be seen by running `premake5 --help`).
-This will output the build files to the `build` directory, and then compilation may be done with the desired build system.
-
-##### Build Options (Use with Premake Invocation)
-`--no-asoundlib`: On Linux, doesn't build MIDI support. Removes libasound as a dev and runtime dependency
-`--use-c23-embed`: Uses `#embed` for resource inclusion instead of a lua script in the Premake file.
-
-##### Build Example (Debian-based Linux)
-
-Obtain dependencies:
-
-`sudo apt install build-essential libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libasound2-dev`
-
-Generate makefile:
-
-`premake5 gmake`
-
-Compile:
-
-`cd build && make -j16`
-
-##### Build Example (macOS)
-
-Install the Xcode Command Line Tools (provides the compiler), if not already present:
-
-`xcode-select --install`
-
-Obtain dependencies (using [Homebrew](https://brew.sh)):
-
-`brew install premake sdl2 sdl2_image sdl2_ttf`
-
-Generate makefile:
-
-`premake5 gmake`
-
-Compile:
-
-`cd build && make -j16`
-
-### Use
-
-EoSD-portable is designed to be a drop-in replacement for the vanilla EoSD binary.
-You will also need to add a font to your game directory with the filename `msgothic.ttc`.
-This may be the actual MS Gothic, taken from a Windows machine, or a compatible font such as Kochi Gothic.
-EoSD-portable uses the Japanese filenames (e.g. 紅魔郷CM.DAT, 東方紅魔郷.cfg). English and other patches, static or thcrap, do not currently work.
-A Japanese locale is not required.
+- The build is complete and links cleanly; runtime has not yet been validated on
+  hardware or in an emulator.
+- GS fog (stage backgrounds) and per-pixel depth-mask are not wired up yet.
+- The texture color-op is fixed to modulate, which covers the common path.
 
 # Decomp Credits
 

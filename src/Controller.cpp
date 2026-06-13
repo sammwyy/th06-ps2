@@ -5,6 +5,7 @@
 #include <SDL2/SDL_scancode.h>
 
 #include "GameErrorContext.hpp"
+#include "Ps2Pad.hpp"
 #include "Supervisor.hpp"
 #include "i18n.hpp"
 #include "utils.hpp"
@@ -360,6 +361,10 @@ const u8 *Controller::GetControllerState()
 
 u16 Controller::GetInput(void)
 {
+#ifdef _EE
+    // On PS2 the input comes straight from joypad 1 via libpad
+    return Ps2Pad::GetButtons();
+#else
     u16 buttons = 0;
 
     buttons |= KEYBOARD_KEY_PRESSED(TH_BUTTON_UP, SDL_SCANCODE_UP);
@@ -387,6 +392,7 @@ u16 Controller::GetInput(void)
     buttons |= KEYBOARD_KEY_PRESSED(TH_BUTTON_ENTER, SDL_SCANCODE_RETURN);
 
     return Controller::GetControllerInput(buttons);
+#endif
 }
 
 void Controller::ResetKeyboard(void)

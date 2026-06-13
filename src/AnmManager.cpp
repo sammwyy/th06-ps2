@@ -327,6 +327,12 @@ ZunResult AnmManager::LoadTexture(i32 textureIdx, const char *textureName, i32 t
     textureSurface = LoadToSurfaceWithFormat(textureName, g_TextureFormatSDLMapping[textureFormat],
                                              (u8 **)&this->textures[textureIdx].fileData);
 
+    if (textureSurface == NULL)
+    {
+        utils::DebugPrint2("AnmManager: failed to load surface for texture '%s'", textureName);
+        return ZUN_ERROR;
+    }
+
     // Hideous hack to account for ANM entries that report a different texture size than the actual size
     const AnmRawEntry *entry = this->anmFiles[textureIdx];
     if (textureSurface->w != entry->width || textureSurface->h != entry->height)

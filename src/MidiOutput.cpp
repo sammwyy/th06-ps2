@@ -1,7 +1,7 @@
 #include "MidiOutput.hpp"
 #include "FileSystem.hpp"
 #include "Supervisor.hpp"
-#include "ZunMemory.hpp"
+#include "MemAlloc.hpp"
 #include "i18n.hpp"
 #include "inttypes.hpp"
 #include "utils.hpp"
@@ -181,7 +181,7 @@ ZunResult MidiOutput::ParseFile(i32 fileIdx)
     this->numTracks = SDL_SwapBE16(*(u16 *)(endOfHeaderPointer + 2));
 
     // Allocate this->divisions * 32 bytes.
-    this->tracks = (MidiTrack *)ZunMemory::Alloc(sizeof(MidiTrack) * this->numTracks);
+    this->tracks = (MidiTrack *)MemAlloc::Alloc(sizeof(MidiTrack) * this->numTracks);
     std::memset(this->tracks, 0, sizeof(MidiTrack) * this->numTracks);
     for (trackIdx = 0; trackIdx < this->numTracks; trackIdx++)
     {
@@ -193,7 +193,7 @@ ZunResult MidiOutput::ParseFile(i32 fileIdx)
         // First, read the length of the chunk
         trackLength = SDL_SwapBE32(*(u32 *)(currentCursorTrack + 4));
         this->tracks[trackIdx].trackLength = trackLength;
-        this->tracks[trackIdx].trackData = (u8 *)ZunMemory::Alloc(trackLength);
+        this->tracks[trackIdx].trackData = (u8 *)MemAlloc::Alloc(trackLength);
         this->tracks[trackIdx].trackPlaying = 1;
         std::memcpy(this->tracks[trackIdx].trackData, currentCursor, trackLength);
         currentCursor += trackLength;

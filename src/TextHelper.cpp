@@ -1,8 +1,10 @@
 #include "TextHelper.hpp"
+#include "FileSystem.hpp"
 #include "GameErrorContext.hpp"
 #include "GameWindow.hpp"
 #include "Supervisor.hpp"
 #include "i18n.hpp"
+#include "utils.hpp"
 
 #include "thirdparty/sjis_converter.h"
 
@@ -35,13 +37,24 @@ ZunResult TextHelper::CreateTextBuffer()
 {
     TTF_Init();
 
-    // Primary font is MSゴシック, which is nonfree and has to be taken from a Windows install
-    // Fallback is Noto Sans Regular (JP) which is redistributable
-    if ((g_Font = TTF_OpenFont(TH_PRIMARY_FONT_FILENAME, 10), g_Font == NULL) &&
-        (std::printf("%s\n", TTF_GetError()), g_Font = TTF_OpenFont(TH_FALLBACK_FONT_FILENAME, 10), g_Font == NULL))
+    // Try several font names, all resolved next to the .elf. Primary is MSゴシック
+    // (nonfree, from a Windows install); the rest are redistributable fallbacks.
+    static const char *fontCandidates[] = {TH_PRIMARY_FONT_FILENAME, TH_FALLBACK_FONT_FILENAME, "NotoSans-Regular.ttf"};
+    g_Font = NULL;
+    for (const char *candidate : fontCandidates)
     {
-        std::printf("%s\n", TTF_GetError());
-
+        char resolved[512];
+        FileSystem::ResolvePath(candidate, resolved, sizeof(resolved));
+        g_Font = TTF_OpenFont(resolved, 10);
+        if (g_Font != NULL)
+        {
+            utils::DebugPrint2("font loaded: %s\n", resolved);
+            break;
+        }
+        utils::DebugPrint2("font not found: %s (%s)\n", resolved, TTF_GetError());
+    }
+    if (g_Font == NULL)
+    {
         g_GameErrorContext.Fatal(TH_ERR_FONTS_NOT_FOUND);
         return ZUN_ERROR;
     }

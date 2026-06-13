@@ -31,6 +31,16 @@ static const CharacterData g_CharData[4] = {
     /* MarisaB */ {5.0, 2.5, 5.0, 2.5, Player::FireBulletMarisaB, Player::FireBulletMarisaB},
 };
 
+static void DrawPlayerGameplaySprite2d(AnmVm *vm)
+{
+    ZunVec3 savedPos = vm->pos;
+
+    vm->pos.x += g_GameManager.arcadeRegionTopLeftPos.x;
+    vm->pos.y += g_GameManager.arcadeRegionTopLeftPos.y;
+    g_AnmManager->Draw(vm);
+    vm->pos = savedPos;
+}
+
 Player::Player()
 {
 }
@@ -587,6 +597,7 @@ void Player::UpdatePlayerBullets(Player *player)
 
 ChainCallbackResult Player::OnDrawHighPrio(Player *p)
 {
+    g_AnmManager->SetDepthFunc(DEPTH_FUNC_ALWAYS);
     Player::DrawBullets(p);
     if (p->bombInfo.isInUse != 0 && p->bombInfo.draw != NULL)
     {
@@ -615,14 +626,20 @@ ChainCallbackResult Player::OnDrawHighPrio(Player *p)
             p->orbsSprite[1].pos.z = 0.491;
             g_AnmManager->Draw(&p->orbsSprite[0]);
             g_AnmManager->Draw(&p->orbsSprite[1]);
+            g_AnmManager->FlushVertexBuffer();
         }
     }
+    g_AnmManager->FlushVertexBuffer();
+    g_AnmManager->SetDepthFunc(DEPTH_FUNC_LEQUAL);
     return CHAIN_CALLBACK_RESULT_CONTINUE;
 }
 
 ChainCallbackResult Player::OnDrawLowPrio(Player *p)
 {
+    g_AnmManager->SetDepthFunc(DEPTH_FUNC_ALWAYS);
     Player::DrawBulletExplosions(p);
+    g_AnmManager->FlushVertexBuffer();
+    g_AnmManager->SetDepthFunc(DEPTH_FUNC_LEQUAL);
     return CHAIN_CALLBACK_RESULT_CONTINUE;
 }
 
@@ -952,7 +969,7 @@ void Player::DrawBullets(Player *p)
         {
             bullets->sprite.rotation.z = ZUN_PI / 2 - utils::AddNormalizeAngle(bullets->unk_134.z, ZUN_PI);
         }
-        g_AnmManager->Draw2(&bullets->sprite);
+        DrawPlayerGameplaySprite2d(&bullets->sprite);
     }
 }
 
@@ -973,7 +990,7 @@ void Player::DrawBulletExplosions(Player *p)
             bullets->sprite.rotation.z = ZUN_PI / 2 - utils::AddNormalizeAngle(bullets->unk_134.z, ZUN_PI);
         }
         bullets->sprite.pos.z = 0.4f;
-        g_AnmManager->Draw2(&bullets->sprite);
+        DrawPlayerGameplaySprite2d(&bullets->sprite);
     }
 }
 

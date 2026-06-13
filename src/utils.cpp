@@ -1,7 +1,5 @@
-#ifdef DEBUG
 #include <cstdarg>
 #include <cstdio>
-#endif
 
 #include "ZunMath.hpp"
 #include "i18n.hpp"
@@ -9,18 +7,49 @@
 
 namespace utils
 {
+
+static FILE *s_DebugLog = nullptr;
+
+void InitDebugLog(const char *path)
+{
+    if (s_DebugLog != nullptr)
+    {
+        std::fclose(s_DebugLog);
+    }
+    s_DebugLog = std::fopen(path, "w");
+}
+
+void CloseDebugLog()
+{
+    if (s_DebugLog != nullptr)
+    {
+        std::fclose(s_DebugLog);
+        s_DebugLog = nullptr;
+    }
+}
+
+// Writes a fully formatted line to stdout and, if open, the debug log file.
+static void EmitLog(const char *prefix, const char *fmt, std::va_list args)
+{
+    char tmpBuffer[512];
+    std::vsnprintf(tmpBuffer, sizeof(tmpBuffer), fmt, args);
+
+    std::printf("%s%s\n", prefix, tmpBuffer);
+    std::fflush(stdout);
+
+    if (s_DebugLog != nullptr)
+    {
+        std::fprintf(s_DebugLog, "%s%s\n", prefix, tmpBuffer);
+        std::fflush(s_DebugLog);
+    }
+}
+
 void DebugPrint(const char *fmt, ...)
 {
-#ifdef DEBUG
-    char tmpBuffer[512];
     std::va_list args;
-
     va_start(args, fmt);
-    std::vsnprintf(tmpBuffer, 511, fmt, args);
+    EmitLog("DEBUG: ", fmt, args);
     va_end(args);
-
-    std::printf("DEBUG2: %s\n", tmpBuffer);
-#endif
 }
 
 f32 AddNormalizeAngle(f32 a, f32 b)
@@ -57,15 +86,9 @@ void Rotate(ZunVec3 *outVector, const ZunVec3 *point, f32 angle)
 
 void DebugPrint2(const char *fmt, ...)
 {
-#ifdef DEBUG
-    char tmpBuffer[512];
     std::va_list args;
-
     va_start(args, fmt);
-    std::vsnprintf(tmpBuffer, 511, fmt, args);
+    EmitLog("DEBUG2: ", fmt, args);
     va_end(args);
-
-    std::printf("DEBUG2: %s\n", tmpBuffer);
-#endif
 }
 }; // namespace utils

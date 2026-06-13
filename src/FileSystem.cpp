@@ -18,10 +18,63 @@
 
 u32 g_LastFileSize;
 
+// Directory the .elf was launched from, with a trailing slash (e.g. "mass:/th06/")
+static char s_BasePath[256] = {0};
+
+void FileSystem::SetBasePath(const char *argv0)
+{
+    s_BasePath[0] = '\0';
+    if (argv0 == NULL)
+    {
+        utils::DebugPrint2("base path: argv0 is null, using cwd-relative paths\n");
+        return;
+    }
+
+    // Cut at the last separator to keep just the directory
+    const char *lastSlash = std::strrchr(argv0, '/');
+    const char *lastBackslash = std::strrchr(argv0, '\\');
+    const char *cut = lastSlash > lastBackslash ? lastSlash : lastBackslash;
+    if (cut == NULL)
+    {
+        // No directory in argv0 (e.g. just "host:"); keep the device part if any
+        const char *colon = std::strrchr(argv0, ':');
+        cut = colon;
+    }
+    if (cut != NULL)
+    {
+        size_t len = (size_t)(cut - argv0) + 1;
+        if (len >= sizeof(s_BasePath))
+        {
+            len = sizeof(s_BasePath) - 1;
+        }
+        std::memcpy(s_BasePath, argv0, len);
+        s_BasePath[len] = '\0';
+    }
+    utils::DebugPrint2("base path: '%s' (from argv0 '%s')\n", s_BasePath, argv0);
+}
+
+const char *FileSystem::ResolvePath(const char *path, char *dst, std::size_t size)
+{
+    // Absolute or device-qualified paths (mass:/, host:/, /foo) pass through
+    bool hasDevice = std::strchr(path, ':') != NULL;
+    bool isAbsolute = path[0] == '/' || path[0] == '\\';
+    if (s_BasePath[0] == '\0' || hasDevice || isAbsolute)
+    {
+        std::snprintf(dst, size, "%s", path);
+    }
+    else
+    {
+        std::snprintf(dst, size, "%s%s", s_BasePath, path);
+    }
+    return dst;
+}
+
 FILE *FileSystem::FopenUTF8(const char *filepath, const char *mode)
 {
 #ifndef _WIN32
-    return std::fopen(filepath, mode);
+    char resolved[512];
+    ResolvePath(filepath, resolved, sizeof(resolved));
+    return std::fopen(resolved, mode);
 #else
     u32 filepathWLen = MultiByteToWideChar(CP_UTF8, 0, filepath, -1, NULL, 0) * 2;
     u32 modeWLen = MultiByteToWideChar(CP_UTF8, 0, mode, -1, NULL, 0) * 2;
@@ -115,11 +168,13 @@ u8 *FileSystem::OpenPath(const char *filepath, int isExternalResource)
     }
     else
     {
-        utils::DebugPrint2("%s Load ... \n", filepath);
+        char resolved[512];
+        ResolvePath(filepath, resolved, sizeof(resolved));
+        utils::DebugPrint2("%s Load (-> %s) ... \n", filepath, resolved);
         file = FopenUTF8(filepath, "rb");
         if (file == NULL)
         {
-            utils::DebugPrint2("error : %s is not found.\n", filepath);
+            utils::DebugPrint2("error : %s is not found (resolved: %s).\n", filepath, resolved);
             return NULL;
         }
         else

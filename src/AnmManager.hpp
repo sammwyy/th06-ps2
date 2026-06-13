@@ -265,6 +265,10 @@ struct AnmManager
             return;
         }
 
+        if (this->dirtyDepthFunc != func)
+        {
+            this->FlushVertexBuffer();
+        }
         this->dirtyDepthFunc = func;
         this->dirtyFlags |= (1 << DIRTY_DEPTH_CONFIG);
     }
