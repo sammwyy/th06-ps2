@@ -46,6 +46,15 @@ void FileManager::Init(StorageTarget target)
     utils::DebugPrint2("FileManager: mc%d info=%d type=%d free=%d format=%d", this->cardPort, infoResult, cardType,
                        cardFree, cardFormat);
 
+    if (infoResult == sceMcResNoFormat || cardFormat == 0)
+    {
+        utils::DebugPrint2("FileManager: mc%d is unformatted, formatting it", this->cardPort);
+        mcFormat(this->cardPort, 0);
+        i32 formatResult;
+        mcSync(0, NULL, &formatResult);
+        utils::DebugPrint2("FileManager: format mc%d -> %d", this->cardPort, formatResult);
+    }
+
     mcMkDir(this->cardPort, 0, TH06_DIR);
     i32 mkdirResult;
     mcSync(0, NULL, &mkdirResult);
