@@ -38,7 +38,7 @@ struct FileManager
     };
 
     StorageTarget target = StorageTarget::None;
-    char baseDir[32] = {0};
+    i32 cardPort = -1;
     MemoryFile memoryFiles[MAX_MEMORY_FILES] = {};
     i32 memoryFileCount = 0;
 

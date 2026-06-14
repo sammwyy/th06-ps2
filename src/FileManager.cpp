@@ -11,6 +11,15 @@
 
 FileManager g_FileManager;
 
+#define TH06_DIR "/TH06"
+
+#define MC_O_RDONLY 0x0001
+#define MC_O_WRONLY 0x0002
+#define MC_O_CREAT 0x0200
+#define MC_O_TRUNC 0x0400
+#define MC_SEEK_SET 0
+#define MC_SEEK_END 2
+
 void FileManager::Init(StorageTarget target)
 {
     this->target = target;
@@ -19,23 +28,28 @@ void FileManager::Init(StorageTarget target)
 
     if (target == StorageTarget::None)
     {
-        this->baseDir[0] = '\0';
+        this->cardPort = -1;
         utils::DebugPrint2("FileManager: in-memory only, nothing is persisted");
         return;
     }
 
-    i32 port = (target == StorageTarget::MemoryCard1) ? 0 : 1;
-    std::snprintf(this->baseDir, sizeof(this->baseDir), "mc%d:/TH06", port);
+    this->cardPort = (target == StorageTarget::MemoryCard1) ? 0 : 1;
 
     SifLoadModule("rom0:XMCMAN", 0, NULL);
     SifLoadModule("rom0:XMCSERV", 0, NULL);
     mcInit(MC_TYPE_XMC);
 
-    mcMkDir(port, 0, "/TH06");
-    i32 result;
-    mcSync(0, NULL, &result);
+    i32 cardType, cardFree, cardFormat;
+    mcGetInfo(this->cardPort, 0, &cardType, &cardFree, &cardFormat);
+    i32 infoResult;
+    mcSync(0, NULL, &infoResult);
+    utils::DebugPrint2("FileManager: mc%d info=%d type=%d free=%d format=%d", this->cardPort, infoResult, cardType,
+                       cardFree, cardFormat);
 
-    utils::DebugPrint2("FileManager: using %s", this->baseDir);
+    mcMkDir(this->cardPort, 0, TH06_DIR);
+    i32 mkdirResult;
+    mcSync(0, NULL, &mkdirResult);
+    utils::DebugPrint2("FileManager: mkdir mc%d:%s -> %d", this->cardPort, TH06_DIR, mkdirResult);
 }
 
 const char *FileManager::Basename(const char *name)
@@ -48,7 +62,7 @@ const char *FileManager::Basename(const char *name)
 
 void FileManager::ResolveName(const char *name, char *dst, size_t size)
 {
-    std::snprintf(dst, size, "%s/%s", this->baseDir, name);
+    std::snprintf(dst, size, "%s/%s", TH06_DIR, name);
 }
 
 FileManager::MemoryFile *FileManager::FindMemoryFile(const char *name)
@@ -72,14 +86,19 @@ bool FileManager::Exists(const char *name)
         return FindMemoryFile(name) != nullptr;
     }
 
-    char path[128];
+    char path[64];
     ResolveName(name, path, sizeof(path));
-    FILE *file = std::fopen(path, "rb");
-    if (file == nullptr)
+
+    i32 fd;
+    mcOpen(this->cardPort, 0, path, MC_O_RDONLY);
+    mcSync(0, NULL, &fd);
+    if (fd < 0)
     {
         return false;
     }
-    std::fclose(file);
+    i32 closeResult;
+    mcClose(fd);
+    mcSync(0, NULL, &closeResult);
     return true;
 }
 
@@ -116,17 +135,27 @@ bool FileManager::Write(const char *name, const void *data, size_t size)
         return true;
     }
 
-    char path[128];
+    char path[64];
     ResolveName(name, path, sizeof(path));
-    FILE *file = std::fopen(path, "wb");
-    if (file == nullptr)
+
+    i32 fd;
+    mcOpen(this->cardPort, 0, path, MC_O_WRONLY | MC_O_CREAT | MC_O_TRUNC);
+    mcSync(0, NULL, &fd);
+    if (fd < 0)
     {
-        utils::DebugPrint2("FileManager: cannot open %s for writing", path);
+        utils::DebugPrint2("FileManager: mcOpen(write) mc%d:%s failed %d", this->cardPort, path, fd);
         return false;
     }
-    bool ok = std::fwrite(data, 1, size, file) == size;
-    std::fclose(file);
-    return ok;
+
+    i32 written;
+    mcWrite(fd, data, (i32)size);
+    mcSync(0, NULL, &written);
+
+    i32 closeResult;
+    mcClose(fd);
+    mcSync(0, NULL, &closeResult);
+
+    return written == (i32)size;
 }
 
 u8 *FileManager::Read(const char *name, size_t *outSize)
@@ -160,10 +189,13 @@ u8 *FileManager::Read(const char *name, size_t *outSize)
         return copy;
     }
 
-    char path[128];
+    char path[64];
     ResolveName(name, path, sizeof(path));
-    FILE *file = std::fopen(path, "rb");
-    if (file == nullptr)
+
+    i32 fd;
+    mcOpen(this->cardPort, 0, path, MC_O_RDONLY);
+    mcSync(0, NULL, &fd);
+    if (fd < 0)
     {
         g_LastFileSize = 0;
         if (outSize != nullptr)
@@ -173,18 +205,29 @@ u8 *FileManager::Read(const char *name, size_t *outSize)
         return nullptr;
     }
 
-    std::fseek(file, 0, SEEK_END);
-    long size = std::ftell(file);
-    std::fseek(file, 0, SEEK_SET);
+    i32 size;
+    mcSeek(fd, 0, MC_SEEK_END);
+    mcSync(0, NULL, &size);
+    i32 seekResult;
+    mcSeek(fd, 0, MC_SEEK_SET);
+    mcSync(0, NULL, &seekResult);
 
     u8 *data = (u8 *)MemAlloc::Alloc(size);
     if (data == nullptr)
     {
-        std::fclose(file);
+        i32 closeResult;
+        mcClose(fd);
+        mcSync(0, NULL, &closeResult);
         return nullptr;
     }
-    std::fread(data, 1, size, file);
-    std::fclose(file);
+
+    i32 bytesRead;
+    mcRead(fd, data, size);
+    mcSync(0, NULL, &bytesRead);
+
+    i32 closeResult;
+    mcClose(fd);
+    mcSync(0, NULL, &closeResult);
 
     g_LastFileSize = (u32)size;
     if (outSize != nullptr)
@@ -212,7 +255,11 @@ bool FileManager::Delete(const char *name)
         return true;
     }
 
-    char path[128];
+    char path[64];
     ResolveName(name, path, sizeof(path));
-    return std::remove(path) == 0;
+
+    i32 deleteResult;
+    mcDelete(this->cardPort, 0, path);
+    mcSync(0, NULL, &deleteResult);
+    return deleteResult >= 0;
 }
