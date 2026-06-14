@@ -38,9 +38,6 @@ ZunResult TextHelper::CreateTextBuffer()
 {
     TTF_Init();
 
-    // Load the font into memory ourselves and hand TTF a memory RWops. TTF_OpenFont
-    // uses SDL_RWFromFile, which fstat()s the file and rejects it when it is not a
-    // regular file: the PS2 cdvd fileio does not report cdrom0: files as regular.
     g_FontData = FileSystem::OpenPath(TH_FONT_FILENAME, 1);
     if (g_FontData == NULL)
     {

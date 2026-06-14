@@ -53,10 +53,6 @@ i32 FileAbstraction::Open(const char *filename, const char *mode)
         return 0;
     }
 
-    // For reads, slurp the whole file into RAM and close the handle right away.
-    // The PS2 cdvd only allows a couple of files open at once, and the PBG3
-    // archives are otherwise kept open for the whole game, which makes opening a
-    // second archive (e.g. a stage's while the menu's is held) fail on disc.
     if (this->access == ACCESS_READ)
     {
         std::fseek(file, 0, SEEK_END);

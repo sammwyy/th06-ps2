@@ -16,12 +16,8 @@
 #include <audsrv.h>
 #include <loadfile.h>
 
-// Loaded from the same directory the .elf was launched from (host:, mass:, cdrom0:, ...).
-// Keep resources/audsrv.irx named exactly like this so it lands next to the elf.
 #define AUDSRV_IRX_FILENAME "audsrv.irx"
 
-// SPU2 audio is fed through audsrv from the main loop. Keep this as a switch
-// while debugging emulator/IOP timing issues.
 #define TH_PS2_ENABLE_AUDSRV 1
 
 // One video frame of stereo 16-bit audio at 44100 Hz (44100 / 60 frames)

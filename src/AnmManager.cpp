@@ -78,13 +78,10 @@ SDL_Surface *AnmManager::LoadToSurfaceWithFormat(const char *filename, SDL_Pixel
 
     SDL_FreeSurface(imageSrcSurface);
 
-    if (imageTargetSurface != NULL && fileData != NULL)
+    std::free(data);
+    if (fileData != NULL)
     {
-        *fileData = data;
-    }
-    else
-    {
-        std::free(data);
+        *fileData = NULL;
     }
 
     return imageTargetSurface;
@@ -387,6 +384,12 @@ ZunResult AnmManager::LoadTexture(i32 textureIdx, const char *textureName, i32 t
         return ZUN_ERROR;
     }
 
+    if (textureFormat != TEX_FMT_A8R8G8B8 && textureFormat != TEX_FMT_A4R4G4B4 && textureFormat != TEX_FMT_A1R5G5B5)
+    {
+        delete[] (u8 *)this->textures[textureIdx].textureData;
+        this->textures[textureIdx].textureData = NULL;
+    }
+
     return ZUN_SUCCESS;
 }
 
@@ -480,6 +483,9 @@ ZunResult AnmManager::LoadTextureAlphaChannel(i32 textureIdx, const char *textur
     this->SetCurrentTexture(this->textures[textureIdx].handle);
     g_GfxBackend->SetTextureImage(textureDesc->width, textureDesc->height, PIXEL_RGBA,
                                   g_TextureFormatTypeMapping[textureFormat], textureDesc->textureData);
+
+    delete[] (u8 *)textureDesc->textureData;
+    textureDesc->textureData = NULL;
 
     return ZUN_SUCCESS;
 }

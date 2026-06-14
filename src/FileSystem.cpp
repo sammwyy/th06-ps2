@@ -68,8 +68,6 @@ const char *FileSystem::ResolvePath(const char *path, char *dst, std::size_t siz
         std::snprintf(dst, size, "%s%s", s_BasePath, path);
     }
 
-    // The BIOS cdvd driver is case sensitive and only exposes the uppercase
-    // ISO9660 names, so normalize the request when reading from the disc.
     if (std::strncmp(dst, "cdrom", 5) == 0)
     {
         char *colon = std::strchr(dst, ':');
@@ -93,8 +91,6 @@ FILE *FileSystem::FopenUTF8(const char *filepath, const char *mode)
 
     FILE *file = std::fopen(resolved, mode);
 
-    // The cdvd driver fails opens transiently while the drive is still seeking or
-    // spinning up; retry a few times so disc reads are reliable.
     if (file == NULL && std::strncmp(resolved, "cdrom", 5) == 0)
     {
         for (int attempt = 0; attempt < 16 && file == NULL; attempt++)
