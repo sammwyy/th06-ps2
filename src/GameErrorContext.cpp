@@ -1,5 +1,4 @@
 #include "GameErrorContext.hpp"
-#include "FileSystem.hpp"
 #include "utils.hpp"
 #include <cstdarg>
 #include <cstdio>
@@ -59,21 +58,9 @@ const char *GameErrorContext::Fatal(const char *fmt, ...)
 
 void GameErrorContext::Flush()
 {
-    FILE *logFile;
-
     if (m_BufferEnd != m_Buffer)
     {
         g_GameErrorContext.Log(TH_ERR_LOGGER_END);
-
-        // Always mirror the error buffer to the debug log so it is visible even
-        // when no writable log file can be created
-        utils::DebugPrint2("---- error log ----\n%s\n-------------------\n", m_Buffer);
-
-        logFile = FileSystem::FopenUTF8("log.txt", "w");
-        if (logFile != NULL)
-        {
-            std::fprintf(logFile, "%s", m_Buffer);
-            std::fclose(logFile);
-        }
+        utils::DebugPrint2("---- error log ----\n%s\n-------------------", m_Buffer);
     }
 }

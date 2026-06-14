@@ -4,6 +4,8 @@
 #include "AnmManager.hpp"
 #include "Ps2Pad.hpp"
 #include "MemAlloc.hpp"
+#include "FileManager.hpp"
+#include "StartScreen.hpp"
 #include "Chain.hpp"
 #include "FileSystem.hpp"
 #include "GameErrorContext.hpp"
@@ -25,22 +27,17 @@ int main(int argc, char *argv[])
     // Resolve game data relative to wherever the .elf was launched from
     FileSystem::SetBasePath(argc > 0 ? argv[0] : NULL);
 
-    // Mirror debug output to a file next to the .elf (EE stdout is not always
-    // visible in emulators)
-    char logPath[512];
-    FileSystem::ResolvePath("th06_log.txt", logPath, sizeof(logPath));
-    utils::InitDebugLog(logPath);
-    utils::DebugPrint2("boot: base path resolved, log at %s\n", logPath);
-
     // SDL's PS2 joystick backend goes through the multitap (mtapInit), which
     // hangs when the multitap RPC never comes up. Read joypad 1 natively instead.
     Ps2Pad::Init();
 
     if (!MemArenas::InitAll())
     {
-        utils::DebugPrint2("boot: arena init failed\n");
+        utils::DebugPrint2("boot: arena init failed");
         return -1;
     }
+
+    g_FileManager.Init(StartScreen::Run());
 
     //    MSG msg;
     //    i32 waste1, waste2, waste3, waste4, waste5, waste6;
@@ -174,11 +171,10 @@ stop:
         goto restart;
     }
 
-    FileSystem::WriteDataToFile(TH_CONFIG_FILE, &g_Supervisor.cfg, sizeof(g_Supervisor.cfg));
+    g_FileManager.Write(SAVE_FILE_CONFIG, &g_Supervisor.cfg, sizeof(g_Supervisor.cfg));
 
     MemArenas::DestroyAll();
     g_GameErrorContext.Flush();
-    utils::DebugPrint2("boot: clean exit\n");
-    utils::CloseDebugLog();
+    utils::DebugPrint2("boot: clean exit");
     return 0;
 }

@@ -8,6 +8,7 @@
 #include "AnmManager.hpp"
 #include "AsciiManager.hpp"
 #include "ChainPriorities.hpp"
+#include "FileManager.hpp"
 #include "FileSystem.hpp"
 #include "GameErrorContext.hpp"
 #include "GameManager.hpp"
@@ -1275,7 +1276,7 @@ i32 MainMenu::ReplayHandling()
                 for (cur = 0; cur < 15; cur++)
                 {
                     std::sprintf(replayFilePath, "./replay/th6_%.2d.rpy", cur + 1);
-                    replayData = (ReplayHeader *)FileSystem::OpenPath(replayFilePath, 1);
+                    replayData = (ReplayHeader *)g_FileManager.Read(replayFilePath, NULL);
                     if (replayData == NULL)
                     {
                         std::free(replayData);
@@ -1361,7 +1362,7 @@ i32 MainMenu::ReplayHandling()
                 g_SoundPlayer.PlaySoundByIdx(SOUND_SELECT);
                 this->currentReplay = (ReplayData *)std::malloc(sizeof(ReplayData));
                 this->currentReplay->header =
-                    (ReplayHeader *)FileSystem::OpenPath(this->replayFilePaths[this->chosenReplay], 1);
+                    (ReplayHeader *)g_FileManager.Read(this->replayFilePaths[this->chosenReplay], NULL);
                 ReplayManager::ValidateReplayData(this->currentReplay->header, g_LastFileSize);
                 for (cur = 0; cur < ARRAY_SIZE_SIGNED(this->currentReplay->stageReplayData); cur++)
                 {

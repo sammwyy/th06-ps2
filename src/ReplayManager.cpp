@@ -5,7 +5,9 @@
 #include <ctime>
 
 #include "Controller.hpp"
+#include "FileManager.hpp"
 #include "FileSystem.hpp"
+#include "MemAlloc.hpp"
 #include "GameManager.hpp"
 #include "Gui.hpp"
 #include "ReplayManager.hpp"
@@ -280,7 +282,14 @@ ZunResult ReplayManager::AddedCallbackDemo(ReplayManager *mgr)
     {
         mgr->replayData = (ReplayData *)std::malloc(sizeof(ReplayData));
 
-        mgr->replayData->header = (ReplayHeader *)FileSystem::OpenPath(mgr->replayFile, g_GameManager.demoMode == 0);
+        if (g_GameManager.demoMode == 0)
+        {
+            mgr->replayData->header = (ReplayHeader *)g_FileManager.Read(mgr->replayFile, NULL);
+        }
+        else
+        {
+            mgr->replayData->header = (ReplayHeader *)FileSystem::OpenPath(mgr->replayFile, 0);
+        }
         if (ValidateReplayData(mgr->replayData->header, g_LastFileSize) != ZUN_SUCCESS)
         {
             return ZUN_ERROR;
@@ -358,7 +367,6 @@ void ReplayManager::StopRecording()
 void ReplayManager::SaveReplay(const char *replayPath, char *replayName)
 {
     ReplayManager *mgr;
-    FILE *file;
     const u8 *checksumCursor;
     ReplayHeader replayCopy;
     u8 *obfuscateCursor;
@@ -465,19 +473,25 @@ void ReplayManager::SaveReplay(const char *replayPath, char *replayName)
                 }
 
                 // Write the data to the replay file.
-                file = FileSystem::FopenUTF8(replayPath, "wb");
-                std::fwrite(&replayCopy, sizeof(ReplayHeader), 1, file);
-                for (stageIdx = 0; stageIdx < ARRAY_SIZE_SIGNED(mgr->replayData->stageReplayData); stageIdx += 1)
+                u8 *replayBuffer = (u8 *)MemAlloc::Alloc(stageReplayPos);
+                if (replayBuffer != NULL)
                 {
-                    if (mgr->replayData->stageReplayData[stageIdx] != NULL)
+                    size_t writePos = 0;
+                    std::memcpy(replayBuffer + writePos, &replayCopy, sizeof(ReplayHeader));
+                    writePos += sizeof(ReplayHeader);
+                    for (stageIdx = 0; stageIdx < ARRAY_SIZE_SIGNED(mgr->replayData->stageReplayData); stageIdx += 1)
                     {
-                        std::fwrite(mgr->replayData->stageReplayData[stageIdx], 1,
-                                    ((iptr)mgr->replayInputStageBookmarks[stageIdx]) -
-                                        ((iptr)mgr->replayData->stageReplayData[stageIdx]),
-                                    file);
+                        if (mgr->replayData->stageReplayData[stageIdx] != NULL)
+                        {
+                            size_t chunkSize = ((iptr)mgr->replayInputStageBookmarks[stageIdx]) -
+                                               ((iptr)mgr->replayData->stageReplayData[stageIdx]);
+                            std::memcpy(replayBuffer + writePos, mgr->replayData->stageReplayData[stageIdx], chunkSize);
+                            writePos += chunkSize;
+                        }
                     }
+                    g_FileManager.Write(replayPath, replayBuffer, writePos);
+                    MemAlloc::Free(replayBuffer);
                 }
-                std::fclose(file);
             }
             for (stageIdx = 0; stageIdx < ARRAY_SIZE_SIGNED(mgr->replayData->stageReplayData); stageIdx += 1)
             {

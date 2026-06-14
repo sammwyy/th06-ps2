@@ -17,6 +17,7 @@ obj/
 # Real game data (copyrighted, never commit)
 data/
 replay/
+iso_root/
 KOUMAKYO_*.dat
 紅魔郷*.DAT
 ver*.dat

@@ -5,6 +5,7 @@
 #include "Chain.hpp"
 #include "ChainPriorities.hpp"
 #include "Controller.hpp"
+#include "FileManager.hpp"
 #include "FileSystem.hpp"
 #include "GameManager.hpp"
 #include "Player.hpp"
@@ -58,7 +59,7 @@ ScoreDat *ResultScreen::OpenScore(const char *path)
     ScoreDat *scoreDat;
 
     scoreDat = (ScoreDat *)malloc(sizeof(ScoreDat));
-    scoreRaw = (ScoreRaw *)FileSystem::OpenPath(path, true);
+    scoreRaw = (ScoreRaw *)g_FileManager.Read(SAVE_FILE_SCORE, NULL);
     if (scoreRaw == NULL)
     {
     FAILED_TO_READ:
@@ -519,7 +520,7 @@ void ResultScreen::WriteScore(ResultScreen *resultScreen)
         bytes++;
         remainingSize--;
     }
-    FileSystem::WriteDataToFile("score.dat", fileBuffer, sizeOfFile);
+    g_FileManager.Write(SAVE_FILE_SCORE, fileBuffer, sizeOfFile);
     std::free(fileBuffer);
 }
 
@@ -863,7 +864,7 @@ i32 ResultScreen::HandleReplaySaveKeyboard()
             for (idx = 0; idx < ARRAY_SIZE_SIGNED(this->replays); idx++)
             {
                 std::sprintf(replayToReadPath, "./replay/th6_%.2d.rpy", idx + 1);
-                replayLoaded = (ReplayHeader *)FileSystem::OpenPath(replayToReadPath, 1);
+                replayLoaded = (ReplayHeader *)g_FileManager.Read(replayToReadPath, NULL);
                 if (replayLoaded == NULL)
                 {
                     continue;

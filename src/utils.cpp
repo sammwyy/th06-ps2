@@ -8,27 +8,6 @@
 namespace utils
 {
 
-static FILE *s_DebugLog = nullptr;
-
-void InitDebugLog(const char *path)
-{
-    if (s_DebugLog != nullptr)
-    {
-        std::fclose(s_DebugLog);
-    }
-    s_DebugLog = std::fopen(path, "w");
-}
-
-void CloseDebugLog()
-{
-    if (s_DebugLog != nullptr)
-    {
-        std::fclose(s_DebugLog);
-        s_DebugLog = nullptr;
-    }
-}
-
-// Writes a fully formatted line to stdout and, if open, the debug log file.
 static void EmitLog(const char *prefix, const char *fmt, std::va_list args)
 {
     char tmpBuffer[512];
@@ -36,19 +15,13 @@ static void EmitLog(const char *prefix, const char *fmt, std::va_list args)
 
     std::printf("%s%s\n", prefix, tmpBuffer);
     std::fflush(stdout);
-
-    if (s_DebugLog != nullptr)
-    {
-        std::fprintf(s_DebugLog, "%s%s\n", prefix, tmpBuffer);
-        std::fflush(s_DebugLog);
-    }
 }
 
 void DebugPrint(const char *fmt, ...)
 {
     std::va_list args;
     va_start(args, fmt);
-    EmitLog("DEBUG: ", fmt, args);
+    EmitLog("[TH06] ", fmt, args);
     va_end(args);
 }
 
@@ -88,7 +61,7 @@ void DebugPrint2(const char *fmt, ...)
 {
     std::va_list args;
     va_start(args, fmt);
-    EmitLog("DEBUG2: ", fmt, args);
+    EmitLog("[TH06/Debug] ", fmt, args);
     va_end(args);
 }
 }; // namespace utils

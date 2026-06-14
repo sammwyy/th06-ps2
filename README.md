@@ -20,6 +20,17 @@ timing, WAV decoding and TTF text staging, none of which touch the GS.
   `MemArena` is a bump allocator for level-scoped memory, backed by `MemAlloc`
   and spilling to it on overflow. Two arenas exist: a per-stage `g_SceneArena`
   (reset on each `Stage::AddedCallback`) and a per-frame `g_FrameArena`.
+- A minimalist start screen (`src/StartScreen.cpp`, gsKit ROM font) shown at
+  boot. It asks where to keep save data: Memory Card 1, Memory Card 2, or no
+  save/load at all.
+- A global `FileManager` (`src/FileManager.cpp`) for all writable user data
+  (config, high scores). The start screen picks its backend: Memory Card 1
+  writes to `mc0:/TH06`, Memory Card 2 to `mc1:/TH06`, and the "no save/load"
+  option keeps everything in RAM only and never persists it. It exposes
+  `Exists` / `Read` / `Write` / `Delete`. Read-only game assets still come from
+  the PBG3 archives via `FileSystem`.
+- Debug output is console-only (no log file): lines are tagged `[TH06]` and
+  `[TH06/Debug]` for the emulator/EE console.
 - A plain `Makefile` (no premake) that builds with the ps2dev EE toolchain.
 
 ### Building
@@ -30,8 +41,14 @@ the SDL2 ports installed (the `PS2DEV` env var must point at the install, defaul
 
 ```
 make            # produces build/th06.elf
+make iso        # produces build/th06.iso (bootable disc image)
 make clean
 ```
+
+`make iso` bundles the ELF, a generated `SYSTEM.CNF` and `audsrv.irx` into
+`build/th06.iso`. Anything placed in an `iso_root/` directory (e.g. the game's
+`.DAT` archives and `bgm/`) is copied onto the disc as well, so a full playable
+image can be produced without committing copyrighted data.
 
 ### Running
 

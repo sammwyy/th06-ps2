@@ -14,6 +14,13 @@ OBJDIR = $(BUILD)/obj
 TARGET = $(BUILD)/th06.elf
 AUDSRV_IRX = $(BUILD)/audsrv.irx
 
+# make iso bundles the elf, SYSTEM.CNF and audsrv.irx into a bootable disc image.
+# Drop game data (PBG3 archives, bgm/, ...) into iso_root/ to include it on the disc.
+ISO = $(BUILD)/th06.iso
+ISO_STAGING = $(BUILD)/iso
+ISO_ROOT = iso_root
+MKISOFS ?= mkisofs
+
 SRCS = \
 	src/AnmManager.cpp \
 	src/AsciiManager.cpp \
@@ -27,6 +34,7 @@ SRCS = \
 	src/Ending.cpp \
 	src/EnemyEclInstr.cpp \
 	src/EnemyManager.cpp \
+	src/FileManager.cpp \
 	src/FileSystem.cpp \
 	src/GameErrorContext.cpp \
 	src/GameManager.cpp \
@@ -44,6 +52,7 @@ SRCS = \
 	src/Rng.cpp \
 	src/ScreenEffect.cpp \
 	src/SoundPlayer.cpp \
+	src/StartScreen.cpp \
 	src/Stage.cpp \
 	src/Supervisor.cpp \
 	src/TextHelper.cpp \
@@ -77,7 +86,7 @@ LDFLAGS = -T$(PS2SDK)/ee/startup/linkfile \
 LIBS = -lSDL2main -lSDL2_image -lSDL2_ttf -lSDL2 \
 	-lfreetype -ljpeg -lpng -lz \
 	-lgskit_toolkit -lgskit -ldmakit \
-	-lpatches -lps2_drivers -laudsrv -lpadx -lm
+	-lpatches -lps2_drivers -laudsrv -lpadx -lmc -lm
 
 all: $(TARGET) $(AUDSRV_IRX)
 
@@ -93,9 +102,21 @@ $(AUDSRV_IRX):
 	@mkdir -p $(BUILD)
 	cp $(PS2SDK)/iop/irx/audsrv.irx $@
 
+iso: $(ISO)
+
+$(ISO): $(TARGET) $(AUDSRV_IRX)
+	@rm -rf $(ISO_STAGING)
+	@mkdir -p $(ISO_STAGING)
+	cp $(TARGET) $(ISO_STAGING)/TH06.ELF
+	cp $(AUDSRV_IRX) $(ISO_STAGING)/AUDSRV.IRX
+	printf 'BOOT2 = cdrom0:\\TH06.ELF;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n' > $(ISO_STAGING)/SYSTEM.CNF
+	@if [ -d $(ISO_ROOT) ]; then cp -r $(ISO_ROOT)/. $(ISO_STAGING)/; fi
+	$(MKISOFS) -quiet -l -o $@ $(ISO_STAGING)
+	@echo "ISO written to $@"
+
 clean:
 	rm -rf $(BUILD)
 
 -include $(OBJS:.o=.d)
 
-.PHONY: all clean
+.PHONY: all clean iso

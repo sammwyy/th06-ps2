@@ -19,11 +19,6 @@
 
 namespace utils
 {
-// Opens a file that DebugPrint output is also written to. Used on PS2 where
-// EE stdout is not always captured by the emulator/console.
-void InitDebugLog(const char *path);
-void CloseDebugLog();
-
 void DebugPrint(const char *fmt, ...);
 void DebugPrint2(const char *fmt, ...);
 

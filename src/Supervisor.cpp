@@ -4,6 +4,7 @@
 #include "Chain.hpp"
 #include "ChainPriorities.hpp"
 #include "Ending.hpp"
+#include "FileManager.hpp"
 #include "FileSystem.hpp"
 #include "GameErrorContext.hpp"
 #include "GameManager.hpp"
@@ -667,7 +668,7 @@ ZunResult Supervisor::LoadConfig(const char *path)
 
     std::memset(&g_Supervisor.cfg, 0, sizeof(GameConfiguration));
     g_Supervisor.cfg.opts = g_Supervisor.cfg.opts | (1 << GCOS_USE_D3D_HW_TEXTURE_BLENDING);
-    data = (GameConfiguration *)FileSystem::OpenPath(path, 1);
+    data = (GameConfiguration *)g_FileManager.Read(SAVE_FILE_CONFIG, NULL);
     if (data == NULL)
     {
         g_Supervisor.cfg.lifeCount = 2;
@@ -781,7 +782,7 @@ ZunResult Supervisor::LoadConfig(const char *path)
     {
         g_GameErrorContext.Log(TH_ERR_DO_NOT_USE_DIRECTINPUT);
     }
-    if (FileSystem::WriteDataToFile(path, &g_Supervisor.cfg, sizeof(GameConfiguration)) != 0)
+    if (!g_FileManager.Write(SAVE_FILE_CONFIG, &g_Supervisor.cfg, sizeof(GameConfiguration)))
     {
         g_GameErrorContext.Fatal(TH_ERR_FILE_CANNOT_BE_EXPORTED, path);
         g_GameErrorContext.Fatal(TH_ERR_FOLDER_HAS_WRITE_PROTECT_OR_DISK_FULL);
