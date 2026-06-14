@@ -9,6 +9,7 @@
 #include <SDL2/SDL_timer.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <new>
 
@@ -16,7 +17,7 @@
 #include <audsrv.h>
 #include <loadfile.h>
 
-#define AUDSRV_IRX_FILENAME "audsrv.irx"
+#define AUDSRV_IRX_FILENAME "AUDSRV.IRX"
 
 #define TH_PS2_ENABLE_AUDSRV 1
 
@@ -249,13 +250,17 @@ ZunResult SoundPlayer::LoadWav(const char *path)
 
     utils::DebugPrint2("load BGM\n");
 
-    char resolvedPath[512];
-    FileSystem::ResolvePath(path, resolvedPath, sizeof(resolvedPath));
-    fileStream = SDL_RWFromFile(resolvedPath, "rb");
-
+    FILE *wavFp = FileSystem::FopenUTF8(path, "rb");
+    if (wavFp == NULL)
+    {
+        utils::DebugPrint2("error : wav file load error %s\n", path);
+        return ZUN_ERROR;
+    }
+    fileStream = SDL_RWFromFP(wavFp, SDL_TRUE);
     if (fileStream == NULL)
     {
-        utils::DebugPrint2("error : wav file load error %s\n", resolvedPath);
+        std::fclose(wavFp);
+        utils::DebugPrint2("error : wav file load error %s\n", path);
         return ZUN_ERROR;
     }
 
@@ -365,7 +370,7 @@ ZunResult SoundPlayer::LoadWav(const char *path)
     return ZUN_SUCCESS;
 
 fail:
-    utils::DebugPrint2("error : BGM wav rejected (unexpected format) %s\n", resolvedPath);
+    utils::DebugPrint2("error : BGM wav rejected (unexpected format) %s\n", path);
     SDL_RWclose(fileStream);
     return ZUN_ERROR;
 }

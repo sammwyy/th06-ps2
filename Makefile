@@ -92,6 +92,7 @@ LIBS = -lSDL2main -lSDL2_image -lSDL2_ttf -lSDL2 \
 	-lpatches -lps2_drivers -laudsrv -lpadx -lmc -lm
 
 all: $(TARGET)
+	@if [ -d $(ISO_RESOURCES) ]; then cp -r $(ISO_RESOURCES)/. $(BUILD)/; fi
 
 $(OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
