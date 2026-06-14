@@ -16,11 +16,13 @@ TARGET = $(BUILD)/th06.elf
 # make iso bundles the elf and SYSTEM.CNF into a bootable disc image.
 # Drop the original game files (PBG3 archives, bgm/, ...) into basegame/ to include them.
 # resources/ holds port assets that ship on the disc (the fallback font, audsrv.irx).
+# The th06e_* archives are an unused English-patch variant and are left off the disc.
 ISO = $(BUILD)/th06.iso
 ISO_STAGING = $(BUILD)/iso
+ISO_SORT = $(BUILD)/iso.sort
 ISO_ROOT = basegame
 ISO_RESOURCES = resources
-MKISOFS ?= mkisofs
+MKISOFS ?= genisoimage
 
 SRCS = \
 	src/AnmManager.cpp \
@@ -106,8 +108,9 @@ iso: $(TARGET)
 	printf 'BOOT2 = cdrom0:\\TH06.ELF;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n' > $(ISO_STAGING)/SYSTEM.CNF
 	@if [ -d $(ISO_RESOURCES) ]; then cp -r $(ISO_RESOURCES)/. $(ISO_STAGING)/; fi
 	@if [ -d $(ISO_ROOT) ]; then cp -r $(ISO_ROOT)/. $(ISO_STAGING)/; fi
-	@rm -f $(ISO_STAGING)/.gitkeep
-	$(MKISOFS) -quiet -l -o $(ISO) $(ISO_STAGING)
+	@rm -f $(ISO_STAGING)/.gitkeep $(ISO_STAGING)/score.dat $(ISO_STAGING)/th06e_* $(ISO_STAGING)/TH06E_*
+	@find $(ISO_STAGING) -maxdepth 1 -type f -printf '%p 1000\n' > $(ISO_SORT)
+	$(MKISOFS) -quiet -l -sort $(ISO_SORT) -o $(ISO) $(ISO_STAGING)
 	@echo "ISO written to $(ISO)"
 
 clean:

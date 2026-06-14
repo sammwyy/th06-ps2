@@ -44,7 +44,7 @@ class FileAbstraction : public IFileAbstraction
 
     bool HasNonNullHandle()
     {
-        return this->handle != NULL;
+        return this->handle != NULL || this->buffer != NULL;
     }
 
   protected:
@@ -52,4 +52,7 @@ class FileAbstraction : public IFileAbstraction
 
   private:
     AccessMode access;
+    u8 *buffer;
+    u32 bufferSize;
+    u32 bufferPos;
 };

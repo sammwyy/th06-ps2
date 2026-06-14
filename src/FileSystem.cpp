@@ -90,7 +90,22 @@ FILE *FileSystem::FopenUTF8(const char *filepath, const char *mode)
 #ifndef _WIN32
     char resolved[512];
     ResolvePath(filepath, resolved, sizeof(resolved));
-    return std::fopen(resolved, mode);
+
+    FILE *file = std::fopen(resolved, mode);
+
+    // The cdvd driver fails opens transiently while the drive is still seeking or
+    // spinning up; retry a few times so disc reads are reliable.
+    if (file == NULL && std::strncmp(resolved, "cdrom", 5) == 0)
+    {
+        for (int attempt = 0; attempt < 16 && file == NULL; attempt++)
+        {
+            for (volatile int spin = 0; spin < 2000000; spin++)
+            {
+            }
+            file = std::fopen(resolved, mode);
+        }
+    }
+    return file;
 #else
     u32 filepathWLen = MultiByteToWideChar(CP_UTF8, 0, filepath, -1, NULL, 0) * 2;
     u32 modeWLen = MultiByteToWideChar(CP_UTF8, 0, mode, -1, NULL, 0) * 2;
