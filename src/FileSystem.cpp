@@ -1,3 +1,4 @@
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -66,6 +67,21 @@ const char *FileSystem::ResolvePath(const char *path, char *dst, std::size_t siz
     {
         std::snprintf(dst, size, "%s%s", s_BasePath, path);
     }
+
+    // The BIOS cdvd driver is case sensitive and only exposes the uppercase
+    // ISO9660 names, so normalize the request when reading from the disc.
+    if (std::strncmp(dst, "cdrom", 5) == 0)
+    {
+        char *colon = std::strchr(dst, ':');
+        if (colon != NULL)
+        {
+            for (char *c = colon + 1; *c != '\0'; c++)
+            {
+                *c = std::toupper((unsigned char)*c);
+            }
+        }
+    }
+
     return dst;
 }
 

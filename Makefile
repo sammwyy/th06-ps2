@@ -12,11 +12,10 @@ EE_CXX = $(EE_PREFIX)g++
 BUILD = build
 OBJDIR = $(BUILD)/obj
 TARGET = $(BUILD)/th06.elf
-AUDSRV_IRX = $(BUILD)/audsrv.irx
 
-# make iso bundles the elf, SYSTEM.CNF and audsrv.irx into a bootable disc image.
+# make iso bundles the elf and SYSTEM.CNF into a bootable disc image.
 # Drop the original game files (PBG3 archives, bgm/, ...) into basegame/ to include them.
-# resources/ holds port assets that ship on the disc (e.g. the fallback font).
+# resources/ holds port assets that ship on the disc (the fallback font, audsrv.irx).
 ISO = $(BUILD)/th06.iso
 ISO_STAGING = $(BUILD)/iso
 ISO_ROOT = basegame
@@ -90,7 +89,7 @@ LIBS = -lSDL2main -lSDL2_image -lSDL2_ttf -lSDL2 \
 	-lgskit_toolkit -lgskit -ldmakit \
 	-lpatches -lps2_drivers -laudsrv -lpadx -lmc -lm
 
-all: $(TARGET) $(AUDSRV_IRX)
+all: $(TARGET)
 
 $(OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
@@ -100,15 +99,10 @@ $(TARGET): $(OBJS)
 	@mkdir -p $(BUILD)
 	$(EE_CXX) $(LDFLAGS) -O2 -o $@ $(OBJS) $(LIBS)
 
-$(AUDSRV_IRX):
-	@mkdir -p $(BUILD)
-	cp $(PS2SDK)/iop/irx/audsrv.irx $@
-
-iso: $(TARGET) $(AUDSRV_IRX)
+iso: $(TARGET)
 	@rm -rf $(ISO_STAGING)
 	@mkdir -p $(ISO_STAGING)
 	cp $(TARGET) $(ISO_STAGING)/TH06.ELF
-	cp $(AUDSRV_IRX) $(ISO_STAGING)/AUDSRV.IRX
 	printf 'BOOT2 = cdrom0:\\TH06.ELF;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n' > $(ISO_STAGING)/SYSTEM.CNF
 	@if [ -d $(ISO_RESOURCES) ]; then cp -r $(ISO_RESOURCES)/. $(ISO_STAGING)/; fi
 	@if [ -d $(ISO_ROOT) ]; then cp -r $(ISO_ROOT)/. $(ISO_STAGING)/; fi

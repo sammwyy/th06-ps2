@@ -13,6 +13,7 @@
 #include <cstring>
 
 static TTF_Font *g_Font;
+static u8 *g_FontData;
 
 TextHelper::TextHelper()
 {
@@ -37,27 +38,25 @@ ZunResult TextHelper::CreateTextBuffer()
 {
     TTF_Init();
 
-    // Try several font names, all resolved next to the .elf. Primary is MSゴシック
-    // (nonfree, from a Windows install); the rest are redistributable fallbacks.
-    static const char *fontCandidates[] = {TH_PRIMARY_FONT_FILENAME, TH_FALLBACK_FONT_FILENAME, "NotoSans-Regular.ttf"};
-    g_Font = NULL;
-    for (const char *candidate : fontCandidates)
+    // Load the font into memory ourselves and hand TTF a memory RWops. TTF_OpenFont
+    // uses SDL_RWFromFile, which fstat()s the file and rejects it when it is not a
+    // regular file: the PS2 cdvd fileio does not report cdrom0: files as regular.
+    g_FontData = FileSystem::OpenPath(TH_FONT_FILENAME, 1);
+    if (g_FontData == NULL)
     {
-        char resolved[512];
-        FileSystem::ResolvePath(candidate, resolved, sizeof(resolved));
-        g_Font = TTF_OpenFont(resolved, 10);
-        if (g_Font != NULL)
-        {
-            utils::DebugPrint2("font loaded: %s\n", resolved);
-            break;
-        }
-        utils::DebugPrint2("font not found: %s (%s)\n", resolved, TTF_GetError());
-    }
-    if (g_Font == NULL)
-    {
+        utils::DebugPrint2("font not found: %s\n", TH_FONT_FILENAME);
         g_GameErrorContext.Fatal(TH_ERR_FONTS_NOT_FOUND);
         return ZUN_ERROR;
     }
+
+    g_Font = TTF_OpenFontRW(SDL_RWFromConstMem(g_FontData, g_LastFileSize), 1, 10);
+    if (g_Font == NULL)
+    {
+        utils::DebugPrint2("font load failed: %s (%s)\n", TH_FONT_FILENAME, TTF_GetError());
+        g_GameErrorContext.Fatal(TH_ERR_FONTS_NOT_FOUND);
+        return ZUN_ERROR;
+    }
+    utils::DebugPrint2("font loaded: %s\n", TH_FONT_FILENAME);
 
     g_TextBufferSurface =
         SDL_CreateRGBSurfaceWithFormat(0, GAME_WINDOW_WIDTH, TEXT_BUFFER_HEIGHT, 32, SDL_PIXELFORMAT_RGBA32);

@@ -32,6 +32,10 @@ score.dat
 th06_log.txt
 log.txt
 
+# Port assets that ship on the disc (kept in the repo despite the rules above)
+!resources/
+!resources/*
+
 # Editor / tooling
 .cache/
 .vs/

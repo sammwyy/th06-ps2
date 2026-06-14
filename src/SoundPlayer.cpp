@@ -16,6 +16,10 @@
 #include <audsrv.h>
 #include <loadfile.h>
 
+// Loaded from the same directory the .elf was launched from (host:, mass:, cdrom0:, ...).
+// Keep resources/audsrv.irx named exactly like this so it lands next to the elf.
+#define AUDSRV_IRX_FILENAME "audsrv.irx"
+
 // SPU2 audio is fed through audsrv from the main loop. Keep this as a switch
 // while debugging emulator/IOP timing issues.
 #define TH_PS2_ENABLE_AUDSRV 1
@@ -57,6 +61,17 @@ static const char *const g_SFXList[26] = {
 };
 SoundPlayer g_SoundPlayer;
 
+#ifdef _EE
+static int LoadAudsrvModule()
+{
+    char resolved[512];
+    FileSystem::ResolvePath(AUDSRV_IRX_FILENAME, resolved, sizeof(resolved));
+    int ret = SifLoadModule(resolved, 0, NULL);
+    utils::DebugPrint2("SoundPlayer: SifLoadModule %s -> %d", resolved, ret);
+    return ret;
+}
+#endif
+
 SoundPlayer::SoundPlayer()
 {
     // Note: memset of an std::mutex crashes on windows
@@ -88,7 +103,7 @@ ZunResult SoundPlayer::InitializeDSound()
     }
 
     utils::DebugPrint2("SoundPlayer: loading audsrv.irx");
-    loadRet = SifLoadModule("host:audsrv.irx", 0, NULL);
+    loadRet = LoadAudsrvModule();
     if (loadRet < 0)
     {
         utils::DebugPrint2("SoundPlayer: audsrv.irx load failed %d", loadRet);
@@ -354,6 +369,7 @@ ZunResult SoundPlayer::LoadWav(const char *path)
     return ZUN_SUCCESS;
 
 fail:
+    utils::DebugPrint2("error : BGM wav rejected (unexpected format) %s\n", resolvedPath);
     SDL_RWclose(fileStream);
     return ZUN_ERROR;
 }
