@@ -15,10 +15,10 @@ TARGET = $(BUILD)/th06.elf
 AUDSRV_IRX = $(BUILD)/audsrv.irx
 
 # make iso bundles the elf, SYSTEM.CNF and audsrv.irx into a bootable disc image.
-# Drop game data (PBG3 archives, bgm/, ...) into iso_root/ to include it on the disc.
+# Drop the original game files (PBG3 archives, bgm/, ...) into basegame/ to include them.
 ISO = $(BUILD)/th06.iso
 ISO_STAGING = $(BUILD)/iso
-ISO_ROOT = iso_root
+ISO_ROOT = basegame
 MKISOFS ?= mkisofs
 
 SRCS = \
@@ -102,17 +102,15 @@ $(AUDSRV_IRX):
 	@mkdir -p $(BUILD)
 	cp $(PS2SDK)/iop/irx/audsrv.irx $@
 
-iso: $(ISO)
-
-$(ISO): $(TARGET) $(AUDSRV_IRX)
+iso: $(TARGET) $(AUDSRV_IRX)
 	@rm -rf $(ISO_STAGING)
 	@mkdir -p $(ISO_STAGING)
 	cp $(TARGET) $(ISO_STAGING)/TH06.ELF
 	cp $(AUDSRV_IRX) $(ISO_STAGING)/AUDSRV.IRX
 	printf 'BOOT2 = cdrom0:\\TH06.ELF;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n' > $(ISO_STAGING)/SYSTEM.CNF
-	@if [ -d $(ISO_ROOT) ]; then cp -r $(ISO_ROOT)/. $(ISO_STAGING)/; fi
-	$(MKISOFS) -quiet -l -o $@ $(ISO_STAGING)
-	@echo "ISO written to $@"
+	@if [ -d $(ISO_ROOT) ]; then cp -r $(ISO_ROOT)/. $(ISO_STAGING)/; rm -f $(ISO_STAGING)/.gitkeep; fi
+	$(MKISOFS) -quiet -l -o $(ISO) $(ISO_STAGING)
+	@echo "ISO written to $(ISO)"
 
 clean:
 	rm -rf $(BUILD)

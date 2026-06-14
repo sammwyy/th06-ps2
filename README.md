@@ -46,9 +46,10 @@ make clean
 ```
 
 `make iso` bundles the ELF, a generated `SYSTEM.CNF` and `audsrv.irx` into
-`build/th06.iso`. Anything placed in an `iso_root/` directory (e.g. the game's
-`.DAT` archives and `bgm/`) is copied onto the disc as well, so a full playable
-image can be produced without committing copyrighted data.
+`build/th06.iso`. Drop the original game files (the `.DAT` archives, `bgm/`, ...)
+into the gitignored `basegame/` directory and they are copied onto the disc as
+well, so a full playable image can be produced without committing copyrighted
+data.
 
 ### Running
 
