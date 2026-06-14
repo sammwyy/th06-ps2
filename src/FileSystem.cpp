@@ -93,9 +93,9 @@ FILE *FileSystem::FopenUTF8(const char *filepath, const char *mode)
 
     if (file == NULL && std::strncmp(resolved, "cdrom", 5) == 0)
     {
-        for (int attempt = 0; attempt < 16 && file == NULL; attempt++)
+        for (int attempt = 0; attempt < 3 && file == NULL; attempt++)
         {
-            for (volatile int spin = 0; spin < 2000000; spin++)
+            for (volatile int spin = 0; spin < 500000; spin++)
             {
             }
             file = std::fopen(resolved, mode);
