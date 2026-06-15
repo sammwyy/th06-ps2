@@ -57,6 +57,7 @@ void Rotate(ZunVec3 *outVector, const ZunVec3 *point, f32 angle)
     outVector->y = cosOut * point->y - sinOut * point->x;
 }
 
+#ifdef DEBUG
 void DebugPrint2(const char *fmt, ...)
 {
     std::va_list args;
@@ -64,4 +65,5 @@ void DebugPrint2(const char *fmt, ...)
     EmitLog("[TH06/Debug] ", fmt, args);
     va_end(args);
 }
+#endif
 }; // namespace utils

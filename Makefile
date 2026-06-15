@@ -79,8 +79,8 @@ INCS = -Isrc \
 	-I$(PORTS)/include -I$(PORTS)/include/SDL2 \
 	-I$(PORTS)/include/freetype2
 
-# DEBUG enables the in-game DebugPrint logging (file loads, renderer init, ...)
-CXXFLAGS = -D_EE -DDEBUG -G0 -O2 -std=c++20 -Wall -gdwarf-2 -gz -MMD -MP $(INCS)
+# Define DEBUG to enable the verbose DebugPrint2 logging (file loads, draws, ...)
+CXXFLAGS = -D_EE -G0 -O2 -std=c++20 -Wall -gdwarf-2 -gz -MMD -MP $(INCS)
 
 LDFLAGS = -T$(PS2SDK)/ee/startup/linkfile \
 	-L$(PS2SDK)/ee/lib -L$(GSKIT)/lib -L$(PORTS)/lib \

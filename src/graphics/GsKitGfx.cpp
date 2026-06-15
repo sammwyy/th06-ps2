@@ -470,6 +470,73 @@ static void ConvertPixels(u32 *dst, const void *src, u32 count, PixelFormat fmt,
     }
 }
 
+static void ConvertPixels16(u16 *dst, const void *src, u32 count, PixelFormat fmt, PixelDataType type)
+{
+    if (src == NULL)
+    {
+        for (u32 i = 0; i < count; i++)
+        {
+            dst[i] = 0xFFFF;
+        }
+        return;
+    }
+
+    const u8 *s8 = (const u8 *)src;
+    const u16 *s16 = (const u16 *)src;
+    switch (type)
+    {
+    case PIXEL_UNSIGNED_BYTE:
+        if (fmt == PIXEL_RGB)
+        {
+            for (u32 i = 0; i < count; i++)
+            {
+                dst[i] = (s8[i * 3] >> 3) | ((s8[i * 3 + 1] >> 3) << 5) | ((s8[i * 3 + 2] >> 3) << 10) | 0x8000;
+            }
+        }
+        else
+        {
+            for (u32 i = 0; i < count; i++)
+            {
+                u16 a = s8[i * 4 + 3] >= 128 ? 0x8000 : 0;
+                dst[i] = (s8[i * 4] >> 3) | ((s8[i * 4 + 1] >> 3) << 5) | ((s8[i * 4 + 2] >> 3) << 10) | a;
+            }
+        }
+        break;
+    case PIXEL_UNSIGNED_SHORT_4_4_4_4:
+        for (u32 i = 0; i < count; i++)
+        {
+            u16 p = s16[i];
+            u32 r = ((p >> 12) & 0xF) << 1;
+            u32 g = ((p >> 8) & 0xF) << 1;
+            u32 b = ((p >> 4) & 0xF) << 1;
+            u16 a = (p & 0xF) >= 8 ? 0x8000 : 0;
+            dst[i] = r | (g << 5) | (b << 10) | a;
+        }
+        break;
+    case PIXEL_UNSIGNED_SHORT_5_5_5_1:
+        for (u32 i = 0; i < count; i++)
+        {
+            u16 p = s16[i];
+            u32 r = (p >> 11) & 0x1F;
+            u32 g = (p >> 6) & 0x1F;
+            u32 b = (p >> 1) & 0x1F;
+            u16 a = (p & 1) ? 0x8000 : 0;
+            dst[i] = r | (g << 5) | (b << 10) | a;
+        }
+        break;
+    case PIXEL_UNSIGNED_SHORT_5_6_5:
+        for (u32 i = 0; i < count; i++)
+        {
+            u16 p = s16[i];
+            u32 r = (p >> 11) & 0x1F;
+            u32 g = ((p >> 5) & 0x3F) >> 1;
+            u32 b = p & 0x1F;
+            dst[i] = r | (g << 5) | (b << 10) | 0x8000;
+        }
+        break;
+    }
+}
+
 void GsKitGfx::SetTextureImage(u32 width, u32 height, PixelFormat fmt, PixelDataType type, const void *data)
 {
     if (boundTexture == nullptr)
@@ -478,27 +545,41 @@ void GsKitGfx::SetTextureImage(u32 width, u32 height, PixelFormat fmt, PixelData
     }
     GSTEXTURE *tex = boundTexture;
 
+    // Large textures (backgrounds) are stored 16-bit to halve their VRAM
+    // footprint: the PS2 only has 4 MiB of VRAM and a single 1024x512 CT32
+    // background (2 MiB) makes gsKit thrash, re-uploading every texture each
+    // frame. Small sprites stay CT32 so their alpha blending is unaffected.
+    bool use16 = (width * height) > (256 * 256);
+    u32 bytesPerPixel = use16 ? 2 : 4;
+
     if (tex->Mem != nullptr && (tex->Width != width || tex->Height != height))
     {
         FreeTextureData(tex);
     }
     if (tex->Mem == nullptr)
     {
-        tex->Mem = (u32 *)memalign(128, width * height * 4);
+        tex->Mem = (u32 *)memalign(128, width * height * bytesPerPixel);
     }
     if (tex->Mem == nullptr)
     {
         utils::DebugPrint2("GsKitGfx: out of memory for %ux%u texture (%u KiB)", width, height,
-                           (width * height * 4) / 1024);
+                           (width * height * bytesPerPixel) / 1024);
         tex->Width = 0;
         tex->Height = 0;
         return;
     }
     tex->Width = width;
     tex->Height = height;
-    tex->PSM = GS_PSM_CT32;
+    tex->PSM = use16 ? GS_PSM_CT16 : GS_PSM_CT32;
 
-    ConvertPixels(tex->Mem, data, width * height, fmt, type);
+    if (use16)
+    {
+        ConvertPixels16((u16 *)tex->Mem, data, width * height, fmt, type);
+    }
+    else
+    {
+        ConvertPixels(tex->Mem, data, width * height, fmt, type);
+    }
 
     gsKit_setup_tbw(tex);
     gsKit_TexManager_invalidate(gs, tex);
@@ -511,13 +592,29 @@ void GsKitGfx::SetTextureSubImage(i32 xoffset, i32 yoffset, i32 width, i32 heigh
         return;
     }
     const u8 *src = (const u8 *)data;
-    for (i32 row = 0; row < height; row++)
+    if (boundTexture->PSM == GS_PSM_CT16)
     {
-        u32 *dst = boundTexture->Mem + (yoffset + row) * boundTexture->Width + xoffset;
-        for (i32 col = 0; col < width; col++)
+        u16 *mem = (u16 *)boundTexture->Mem;
+        for (i32 row = 0; row < height; row++)
         {
-            const u8 *p = src + (row * width + col) * 3;
-            dst[col] = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | 0x80000000;
+            u16 *dst = mem + (yoffset + row) * boundTexture->Width + xoffset;
+            for (i32 col = 0; col < width; col++)
+            {
+                const u8 *p = src + (row * width + col) * 3;
+                dst[col] = (p[0] >> 3) | ((p[1] >> 3) << 5) | ((p[2] >> 3) << 10) | 0x8000;
+            }
+        }
+    }
+    else
+    {
+        for (i32 row = 0; row < height; row++)
+        {
+            u32 *dst = boundTexture->Mem + (yoffset + row) * boundTexture->Width + xoffset;
+            for (i32 col = 0; col < width; col++)
+            {
+                const u8 *p = src + (row * width + col) * 3;
+                dst[col] = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | 0x80000000;
+            }
         }
     }
     gsKit_TexManager_invalidate(gs, boundTexture);

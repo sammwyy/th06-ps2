@@ -20,7 +20,13 @@
 namespace utils
 {
 void DebugPrint(const char *fmt, ...);
+#ifdef DEBUG
 void DebugPrint2(const char *fmt, ...);
+#else
+inline void DebugPrint2(const char *, ...)
+{
+}
+#endif
 
 f32 AddNormalizeAngle(f32 a, f32 b);
 void Rotate(ZunVec3 *outVector, const ZunVec3 *point, f32 angle);
