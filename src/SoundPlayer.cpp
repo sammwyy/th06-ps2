@@ -25,6 +25,11 @@
 #define PS2_AUDIO_FREQ 44100
 #define PS2_FRAME_SAMPLES 735
 #define PS2_FRAME_BYTES (PS2_FRAME_SAMPLES * 2 * 2)
+
+// Cap how many frames of audio are mixed per call so a slow cdrom BGM read can
+// never spiral into mixing (and reading) ever more to catch up, which would
+// drag the whole frame rate down.
+#define PS2_MAX_MIX_FRAMES 6
 #endif
 
 // This would all be a lot easier with SDL_mixer, but SDL_mixer doesn't permit any way of doing custom
@@ -222,11 +227,13 @@ void SoundPlayer::StopBGM()
 
 void SoundPlayer::FadeOut(f32 seconds)
 {
+    this->soundBufMutex.lock();
     if (this->backgroundMusic.srcWav.fileStream != NULL)
     {
         this->backgroundMusic.fadeoutLen = seconds * 44100;
         this->backgroundMusic.fadeoutProgress = 0;
     }
+    this->soundBufMutex.unlock();
 }
 
 ZunResult SoundPlayer::LoadWav(const char *path)
@@ -256,6 +263,9 @@ ZunResult SoundPlayer::LoadWav(const char *path)
         utils::DebugPrint2("error : wav file load error %s\n", path);
         return ZUN_ERROR;
     }
+    // Large buffer so streaming the BGM does few, big cdrom reads instead of many
+    // tiny ones, each of which carries cdvd round-trip latency.
+    std::setvbuf(wavFp, NULL, _IOFBF, 64 * 1024);
     fileStream = SDL_RWFromFP(wavFp, SDL_TRUE);
     if (fileStream == NULL)
     {
@@ -358,7 +368,7 @@ ZunResult SoundPlayer::LoadWav(const char *path)
         goto fail;
     }
 
-    this->backgroundMusic.srcWav.fileStream = fileStream;
+    soundBufMutex.lock();
     this->backgroundMusic.srcWav.dataStartOffset = SDL_RWtell(fileStream);
     this->ResetBgmStreamBuffer();
     this->backgroundMusic.loopStart = 0;
@@ -366,6 +376,8 @@ ZunResult SoundPlayer::LoadWav(const char *path)
     this->backgroundMusic.fadeoutLen = 0;
     this->backgroundMusic.fadeoutProgress = 0;
     this->backgroundMusic.pos = 0;
+    this->backgroundMusic.srcWav.fileStream = fileStream;
+    soundBufMutex.unlock();
 
     return ZUN_SUCCESS;
 
@@ -391,21 +403,26 @@ ZunResult SoundPlayer::LoadPos(const char *path)
         return ZUN_ERROR;
     }
 
-    this->backgroundMusic.loopStart = SDL_SwapLE32(*((u32 *)fileData));
-    this->backgroundMusic.loopEnd = SDL_SwapLE32(*(u32 *)(fileData + 4));
+    u32 loopStart = SDL_SwapLE32(*((u32 *)fileData));
+    u32 loopEnd = SDL_SwapLE32(*(u32 *)(fileData + 4));
 
     free(fileData);
 
-    if (this->backgroundMusic.loopStart >= this->backgroundMusic.loopEnd ||
-        this->backgroundMusic.loopEnd > this->backgroundMusic.srcWav.samples)
+    this->soundBufMutex.lock();
+    bool valid = !(loopStart >= loopEnd || loopEnd > this->backgroundMusic.srcWav.samples);
+    if (valid)
+    {
+        this->backgroundMusic.loopStart = loopStart;
+        this->backgroundMusic.loopEnd = loopEnd;
+    }
+    else
     {
         this->backgroundMusic.loopStart = 0;
         this->backgroundMusic.loopEnd = this->backgroundMusic.srcWav.samples;
-
-        return ZUN_ERROR;
     }
+    this->soundBufMutex.unlock();
 
-    return ZUN_SUCCESS;
+    return valid ? ZUN_SUCCESS : ZUN_ERROR;
 }
 
 ZunResult SoundPlayer::InitSoundBuffers()
@@ -534,22 +551,19 @@ ZunResult SoundPlayer::PlayBGM(bool isLooping)
     //        return ZUN_ERROR;
     //    }
     utils::DebugPrint2("comp\n");
+    this->soundBufMutex.lock();
     this->isLooping = isLooping;
     this->backgroundMusic.pos = 0;
     this->ResetBgmStreamBuffer();
     SDL_RWseek(this->backgroundMusic.srcWav.fileStream, this->backgroundMusic.srcWav.dataStartOffset, SEEK_SET);
+    this->soundBufMutex.unlock();
     return ZUN_SUCCESS;
 }
 
-void SoundPlayer::PlaySounds()
+void SoundPlayer::ProcessSoundTriggers()
 {
     i32 idx;
     i32 sndBufIdx;
-
-    if (this->audioDev == 0 || !g_Supervisor.cfg.playSounds)
-    {
-        return;
-    }
 
     soundBufMutex.lock();
 
@@ -573,15 +587,25 @@ void SoundPlayer::PlaySounds()
     }
 
     soundBufMutex.unlock();
+}
+
+void SoundPlayer::PlaySounds()
+{
+    if (this->audioDev == 0 || !g_Supervisor.cfg.playSounds)
+    {
+        return;
+    }
+
+    this->ProcessSoundTriggers();
 
 #ifdef _EE
-    // No mixer thread on PS2: top up the audsrv ring buffer from here every
-    // frame, only mixing while there is room so audsrv_play_audio never blocks.
     int budget = audsrv_available();
-    while (budget >= PS2_FRAME_BYTES)
+    int mixed = 0;
+    while (budget >= PS2_FRAME_BYTES && mixed < PS2_MAX_MIX_FRAMES)
     {
         MixAudio(PS2_FRAME_SAMPLES * 2);
         budget -= PS2_FRAME_BYTES;
+        mixed++;
     }
 #endif
 }

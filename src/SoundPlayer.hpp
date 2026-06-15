@@ -102,6 +102,7 @@ struct SoundPlayer
     ZunResult LoadPos(const char *path);
 
     void BackgroundMusicPlayerThread();
+    void ProcessSoundTriggers();
     void MixAudio(u32 samples);
     void ResetBgmStreamBuffer();
     u32 ReadBgmFrames(i16 *dst, u32 frames);
